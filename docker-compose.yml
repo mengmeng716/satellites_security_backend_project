@@ -1,0 +1,107 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: satsec-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: ${DB_NAME:-satellite_security_db}
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${MYSQL_EXPOSE_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init_data.sql:/docker-entrypoint-initdb.d/init_data.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.0", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: satsec-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    image: satellite-backend:1.0.0
+    container_name: satsec-backend
+    restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000  # 关键：不用gunicorn
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      CELERY_BROKER_URL: redis://redis:6379/0
+    ports:
+      - "${BACKEND_EXPOSE_PORT:-8000}:8000"
+    volumes:
+      - app_data:/app/data
+      - app_algo:/app/algo
+
+  celery_worker:
+    image: satellite-backend:1.0.0
+    container_name: satsec-celery-worker
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: ["celery", "-A", "satellites_security_backend", "worker", "-l", "info", "--concurrency=1"]
+    volumes:
+      - app_data:/app/data
+      - app_algo:/app/algo
+
+  frontend:
+    image: satellite-frontend:1.0.0
+    container_name: satsec-frontend
+    environment:
+      - API_HOST=backend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  mysql_data:
+  redis_data:
+  app_data:
+  app_algo:
+

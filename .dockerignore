@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.log
+.git/
+.gitignore
+.env
+.venv/
+venv/
+node_modules/
+.DS_Store
+data/
+
+# Build context excludes runtime/generated data.
