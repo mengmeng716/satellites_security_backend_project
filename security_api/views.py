@@ -1,8 +1,8 @@
 import json
+import time
 import uuid
 from datetime import datetime
-import threading
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
 
@@ -29,9 +29,9 @@ def run_pipeline_api(request):
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"参数解析错误: {str(e)}"}, status=400)
 
-    # 用精确到毫秒的时间戳字符串作为 task_id，以兼容落盘时的 start_timestamp 和前端基于字符串和数值的最新批次排序
-    task_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-    PipelineTask.objects.create(task_id=task_id, status='running', current_stage='Simulation')
+    # 保留可排序时间前缀，同时追加随机后缀，避免高并发毫秒级 task_id 碰撞
+    task_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]}_{uuid.uuid4().hex[:8]}"
+    PipelineTask.objects.create(task_id=task_id, status='queued', current_stage='Simulation')
 
     # 发送任务给 Celery Worker
     run_pipeline_background_task.delay(env_config, task_id)
@@ -56,6 +56,66 @@ def get_task_status_api(request, task_id):
         })
     except PipelineTask.DoesNotExist:
         return JsonResponse({"status": "error", "message": "任务不存在"}, status=404)
+
+
+@require_GET
+def stream_task_events_api(request, task_id):
+    if not PipelineTask.objects.filter(task_id=task_id).exists():
+        return JsonResponse({"status": "error", "message": "任务不存在"}, status=404)
+
+    def _event_stream():
+        last_signature = None
+        last_heartbeat = time.monotonic()
+        deadline = time.monotonic() + 1800  # 单连接最长 30 分钟
+
+        while time.monotonic() < deadline:
+            task = PipelineTask.objects.filter(task_id=task_id).values(
+                "task_id", "status", "current_stage", "error_message", "updated_at"
+            ).first()
+            if not task:
+                payload = {
+                    "task_id": task_id,
+                    "pipeline_status": "not_found",
+                    "current_stage": None,
+                    "error_message": "任务不存在",
+                    "event": "pipeline_update",
+                }
+                yield f"event: pipeline_update\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                break
+
+            updated_at_iso = task["updated_at"].isoformat() if task.get("updated_at") else ""
+            signature = (
+                task.get("status"),
+                task.get("current_stage"),
+                task.get("error_message") or "",
+                updated_at_iso,
+            )
+
+            if signature != last_signature:
+                payload = {
+                    "task_id": task.get("task_id"),
+                    "pipeline_status": task.get("status"),
+                    "current_stage": task.get("current_stage"),
+                    "error_message": task.get("error_message"),
+                    "updated_at": updated_at_iso,
+                    "event": "pipeline_update",
+                }
+                yield f"event: pipeline_update\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                last_signature = signature
+                if task.get("status") in {"completed", "failed"}:
+                    break
+
+            now = time.monotonic()
+            if now - last_heartbeat >= 15:
+                yield ": heartbeat\n\n"
+                last_heartbeat = now
+
+            time.sleep(1)
+
+    response = StreamingHttpResponse(_event_stream(), content_type="text/event-stream")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
 
 
 @require_GET
@@ -110,6 +170,9 @@ def get_task_results_api(request, task_id):
                         "RewardAttack_level": ev.scenario.RewardAttack_level,
                         "ExperiencePoolAttack_level": ev.scenario.ExperiencePoolAttack_level,
                         "ModelTampAttack_level": ev.scenario.ModelTampAttack_level,
+                        "scenario_similarity": ev.scenario.scenario_similarity,
+                        "latest_coverage": ev.scenario.latest_coverage,
+                        "failure_detection_accuracy": ev.scenario.failure_detection_accuracy,
                     })
                 data_list.append(row)
 
