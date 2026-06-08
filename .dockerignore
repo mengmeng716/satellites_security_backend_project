@@ -12,5 +12,7 @@ venv/
 node_modules/
 .DS_Store
 data/
+algo/data/
+*.sql
 
 # Build context excludes runtime/generated data.

@@ -31,14 +31,19 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
 elif command -v docker-compose >/dev/null 2>&1; then
   COMPOSE_CMD=(docker-compose)
 else
-  echo "[db_restore] Error: neither 'docker compose' nor 'docker-compose' is available."
-  exit 1
+  COMPOSE_CMD=()
 fi
 
-echo "[db_restore] Using compose command: ${COMPOSE_CMD[*]}"
 echo "[db_restore] Restoring '${SQL_FILE}' into database '${DB_NAME}' ..."
 
-cat "$SQL_FILE" | "${COMPOSE_CMD[@]}" exec -T mysql sh -lc \
-  "exec mysql -u\"$DB_USER\" -p\"$DB_PASSWORD\" \"$DB_NAME\""
+if [[ ${#COMPOSE_CMD[@]} -gt 0 ]]; then
+  echo "[db_restore] Using compose command: ${COMPOSE_CMD[*]}"
+  cat "$SQL_FILE" | "${COMPOSE_CMD[@]}" exec -T mysql sh -lc \
+    "exec mysql -u\"$DB_USER\" -p\"$DB_PASSWORD\" \"$DB_NAME\""
+else
+  echo "[db_restore] Compose not found, fallback to container name: satsec-mysql"
+  cat "$SQL_FILE" | docker exec -i satsec-mysql sh -lc \
+    "exec mysql -u\"$DB_USER\" -p\"$DB_PASSWORD\" \"$DB_NAME\""
+fi
 
 echo "[db_restore] Done."

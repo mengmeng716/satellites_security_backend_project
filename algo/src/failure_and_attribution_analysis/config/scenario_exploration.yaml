@@ -31,7 +31,7 @@
 # - 每个生成场景仍然最多只会启用 1 种攻击。
 # - Command-line `--single-attack-types` temporarily overrides this file.
 # - 命令行 `--single-attack-types` 会临时覆盖这里的值。
-single_attack_types: ["StateObservationAttack", "ModelTampAttack"]
+single_attack_types: []
 
 online_threshold_split:
   mode: "stratified_late_holdout"

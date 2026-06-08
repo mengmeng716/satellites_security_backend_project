@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('healthz/', views.healthz_api, name='healthz_api'),
     path('run-pipeline/', views.run_pipeline_api, name='run_pipeline_api'),
     path('run-pipeline/status/<str:task_id>/', views.get_task_status_api, name='get_task_status_api'),
     path('run-pipeline/stream/<str:task_id>/', views.stream_task_events_api, name='stream_task_events_api'),

@@ -21,15 +21,21 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
 elif command -v docker-compose >/dev/null 2>&1; then
   COMPOSE_CMD=(docker-compose)
 else
-  echo "[db_backup] Error: neither 'docker compose' nor 'docker-compose' is available."
-  exit 1
+  COMPOSE_CMD=()
 fi
 
-echo "[db_backup] Using compose command: ${COMPOSE_CMD[*]}"
 echo "[db_backup] Backing up database '${DB_NAME}' to '${OUT_FILE}' ..."
 
-"${COMPOSE_CMD[@]}" exec -T mysql sh -lc \
-  "exec mysqldump -u\"$DB_USER\" -p\"$DB_PASSWORD\" --databases \"$DB_NAME\" --single-transaction --quick --set-gtid-purged=OFF" \
-  > "$OUT_FILE"
+if [[ ${#COMPOSE_CMD[@]} -gt 0 ]]; then
+  echo "[db_backup] Using compose command: ${COMPOSE_CMD[*]}"
+  "${COMPOSE_CMD[@]}" exec -T mysql sh -lc \
+    "exec mysqldump -u\"$DB_USER\" -p\"$DB_PASSWORD\" --databases \"$DB_NAME\" --single-transaction --quick --set-gtid-purged=OFF" \
+    > "$OUT_FILE"
+else
+  echo "[db_backup] Compose not found, fallback to container name: satsec-mysql"
+  docker exec -i satsec-mysql sh -lc \
+    "exec mysqldump -u\"$DB_USER\" -p\"$DB_PASSWORD\" --databases \"$DB_NAME\" --single-transaction --quick --set-gtid-purged=OFF" \
+    > "$OUT_FILE"
+fi
 
 echo "[db_backup] Done: $OUT_FILE"

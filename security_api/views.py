@@ -10,6 +10,11 @@ from django.views.decorators.http import require_POST, require_GET
 from security_api.models import PipelineTask
 from security_api.tasks import run_pipeline_background_task
 
+
+@require_GET
+def healthz_api(request):
+    return JsonResponse({"status": "ok"})
+
 @csrf_exempt
 @require_POST
 def run_pipeline_api(request):

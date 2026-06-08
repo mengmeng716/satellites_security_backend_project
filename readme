@@ -1,0 +1,17 @@
+1. 启 Redis（若未启动）
+docker run -d --name satsec-redis-local -p 6379:6379 redis:7.2-alpine
+
+2.启后端
+source /home/qmm/.venvs/django-security/bin/activate
+cd /home/qmm/workspace/satellites_security_backend_project
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
+
+3.启 Celery（新终端）
+source /home/qmm/.venvs/django-security/bin/activate
+cd /home/qmm/workspace/satellites_security_backend_project
+celery -A satellites_security_backend worker -l info --concurrency=1
+
+4.启前端（新终端）
+cd /home/qmm/workspace/satellite-front
+npm run dev -- --host 0.0.0.0 --port 5173
