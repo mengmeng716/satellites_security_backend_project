@@ -8,14 +8,18 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
       MYSQL_DATABASE: ${DB_NAME:-satellite_security_db}
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    command: >-
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --wait_timeout=${MYSQL_WAIT_TIMEOUT_SECONDS:-172800}
+      --interactive_timeout=${MYSQL_INTERACTIVE_TIMEOUT_SECONDS:-172800}
     ports:
       - "${MYSQL_EXPOSE_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./init_data.sql:/docker-entrypoint-initdb.d/init_data.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.0", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -53,6 +57,9 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       CELERY_BROKER_URL: redis://redis:6379/0
+      SATSEC_SSE_MAX_SECONDS: ${SATSEC_SSE_MAX_SECONDS:-432000}
+      SATSEC_TASK_HEARTBEAT_SECONDS: ${SATSEC_TASK_HEARTBEAT_SECONDS:-30}
+      SATSEC_DB_HEARTBEAT_SECONDS: ${SATSEC_DB_HEARTBEAT_SECONDS:-120}
     ports:
       - "${BACKEND_EXPOSE_PORT:-8000}:8000"
     volumes:
@@ -83,6 +90,9 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       CELERY_BROKER_URL: redis://redis:6379/0
+      SATSEC_SSE_MAX_SECONDS: ${SATSEC_SSE_MAX_SECONDS:-432000}
+      SATSEC_TASK_HEARTBEAT_SECONDS: ${SATSEC_TASK_HEARTBEAT_SECONDS:-30}
+      SATSEC_DB_HEARTBEAT_SECONDS: ${SATSEC_DB_HEARTBEAT_SECONDS:-120}
     command: ["celery", "-A", "satellites_security_backend", "worker", "-l", "info", "--concurrency=1"]
     volumes:
       - app_data:/app/data

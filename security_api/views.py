@@ -2,6 +2,7 @@ import json
 import time
 import uuid
 from datetime import datetime
+from django.conf import settings
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
@@ -47,12 +48,16 @@ def run_pipeline_api(request):
 def get_task_status_api(request, task_id):
     try:
         task = PipelineTask.objects.get(task_id=task_id)
+        updated_at_iso = task.updated_at.isoformat() if task.updated_at else None
+        created_at_iso = task.created_at.isoformat() if task.created_at else None
         return JsonResponse({
             "status": "success",
             "task_id": task.task_id,
             "pipeline_status": task.status,
             "current_stage": task.current_stage,
-            "error_message": task.error_message
+            "error_message": task.error_message,
+            "created_at": created_at_iso,
+            "updated_at": updated_at_iso,
         })
     except PipelineTask.DoesNotExist:
         return JsonResponse({"status": "error", "message": "任务不存在"}, status=404)
@@ -66,7 +71,10 @@ def stream_task_events_api(request, task_id):
     def _event_stream():
         last_signature = None
         last_heartbeat = time.monotonic()
-        deadline = time.monotonic() + 1800  # 单连接最长 30 分钟
+        max_stream_seconds = int(getattr(settings, "SATSEC_SSE_MAX_SECONDS", 21600))
+        deadline = time.monotonic() + max(300, max_stream_seconds)
+
+        yield "retry: 5000\n\n"
 
         while time.monotonic() < deadline:
             task = PipelineTask.objects.filter(task_id=task_id).values(

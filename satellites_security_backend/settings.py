@@ -144,6 +144,11 @@ CELERY_TASK_TIME_LIMIT = 432000  # 5 days soft limit matching your 3-day expecta
 CELERY_TASK_ACKS_LATE = True     # 允许重启丢失时重新领取任务
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1 # 长期任务防止一个worker垄断任务而不执行
 
+# Long-running pipeline observability settings
+SATSEC_SSE_MAX_SECONDS = int(os.environ.get("SATSEC_SSE_MAX_SECONDS", "432000"))
+SATSEC_TASK_HEARTBEAT_SECONDS = int(os.environ.get("SATSEC_TASK_HEARTBEAT_SECONDS", "30"))
+SATSEC_DB_HEARTBEAT_SECONDS = int(os.environ.get("SATSEC_DB_HEARTBEAT_SECONDS", "120"))
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
