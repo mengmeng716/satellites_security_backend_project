@@ -1780,6 +1780,7 @@ def main(
         database_write_summaries.append(
             write_database_rows(database_writer, STEP_EVALUATE_TABLE, step_rows)
         )
+
         update_pipeline_stage(database_writer, "Analysis")
         touch_pipeline_heartbeat(database_writer)
         write_json(manifest_path, manifest)

@@ -1,0 +1,413 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 805B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.12-bullseye
+#2 DONE 0.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 217B done
+#3 DONE 0.0s
+
+#4 [1/7] FROM docker.io/library/python:3.12-bullseye@sha256:7cc929040c5e8cf6036c5099d62a83708427c131fb7a7c965b5ba51e995eea1c
+#4 resolve docker.io/library/python:3.12-bullseye@sha256:7cc929040c5e8cf6036c5099d62a83708427c131fb7a7c965b5ba51e995eea1c 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 18.22kB 0.0s done
+#5 DONE 0.0s
+
+#6 [2/7] WORKDIR /app
+#6 CACHED
+
+#7 [3/7] RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     gcc     g++     pkg-config     default-libmysqlclient-dev     libgomp1     libgl1     libglib2.0-0     libgeos-dev     libproj-dev     proj-data     proj-bin     && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [4/7] COPY requirements-docker.txt /app/requirements-docker.txt
+#8 DONE 0.0s
+
+#9 [5/7] RUN pip install -r /app/requirements-docker.txt --extra-index-url https://download.pytorch.org/whl/cu124
+#9 1.579 Looking in indexes: https://pypi.org/simple, https://download.pytorch.org/whl/cu124
+#9 2.332 Collecting absl-py==2.4.0 (from -r /app/requirements-docker.txt (line 1))
+#9 2.599   Downloading absl_py-2.4.0-py3-none-any.whl.metadata (3.3 kB)
+#9 2.998 Collecting asgiref==3.11.1 (from -r /app/requirements-docker.txt (line 2))
+#9 3.086   Downloading asgiref-3.11.1-py3-none-any.whl.metadata (9.3 kB)
+#9 4.660 Collecting astropy==7.2.0 (from -r /app/requirements-docker.txt (line 3))
+#9 4.748   Downloading astropy-7.2.0-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+#9 5.719 Collecting astropy-iers-data==0.2026.5.25.1.14.13 (from -r /app/requirements-docker.txt (line 4))
+#9 5.807   Downloading astropy_iers_data-0.2026.5.25.1.14.13-py3-none-any.whl.metadata (3.4 kB)
+#9 6.213 Collecting attrs==26.1.0 (from -r /app/requirements-docker.txt (line 5))
+#9 6.300   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+#9 7.319 Collecting Cartopy==0.25.0 (from -r /app/requirements-docker.txt (line 6))
+#9 7.407   Downloading cartopy-0.25.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (6.1 kB)
+#9 7.893 Collecting certifi==2026.5.20 (from -r /app/requirements-docker.txt (line 7))
+#9 7.979   Downloading certifi-2026.5.20-py3-none-any.whl.metadata (2.5 kB)
+#9 9.589 Collecting charset-normalizer==3.4.7 (from -r /app/requirements-docker.txt (line 8))
+#9 9.676   Downloading charset_normalizer-3.4.7-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+#9 10.57 Collecting click==8.4.1 (from -r /app/requirements-docker.txt (line 9))
+#9 10.66   Downloading click-8.4.1-py3-none-any.whl.metadata (2.6 kB)
+#9 11.47 Collecting cloudpickle==3.1.2 (from -r /app/requirements-docker.txt (line 10))
+#9 11.55   Downloading cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+#9 12.80 Collecting contourpy==1.3.3 (from -r /app/requirements-docker.txt (line 11))
+#9 12.89   Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (5.5 kB)
+#9 13.27 Collecting cycler==0.12.1 (from -r /app/requirements-docker.txt (line 12))
+#9 13.36   Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+#9 14.60 Collecting Django==6.0.5 (from -r /app/requirements-docker.txt (line 13))
+#9 14.68   Downloading django-6.0.5-py3-none-any.whl.metadata (3.9 kB)
+#9 15.51 Collecting django-cors-headers==4.9.0 (from -r /app/requirements-docker.txt (line 14))
+#9 15.60   Downloading django_cors_headers-4.9.0-py3-none-any.whl.metadata (16 kB)
+#9 16.12 Collecting djangorestframework==3.17.1 (from -r /app/requirements-docker.txt (line 15))
+#9 16.21   Downloading djangorestframework-3.17.1-py3-none-any.whl.metadata (7.9 kB)
+#9 16.62 Collecting Farama-Notifications==0.0.6 (from -r /app/requirements-docker.txt (line 16))
+#9 16.71   Downloading farama_notifications-0.0.6-py3-none-any.whl.metadata (729 bytes)
+#9 17.42 Collecting filelock==3.29.0 (from -r /app/requirements-docker.txt (line 17))
+#9 17.51   Downloading filelock-3.29.0-py3-none-any.whl.metadata (2.0 kB)
+#9 19.44 Collecting fonttools==4.63.0 (from -r /app/requirements-docker.txt (line 18))
+#9 19.53   Downloading fonttools-4.63.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (118 kB)
+#9 20.74 Collecting fsspec==2026.4.0 (from -r /app/requirements-docker.txt (line 19))
+#9 20.82   Downloading fsspec-2026.4.0-py3-none-any.whl.metadata (10 kB)
+#9 21.26 Collecting geopandas==1.1.3 (from -r /app/requirements-docker.txt (line 20))
+#9 21.35   Downloading geopandas-1.1.3-py3-none-any.whl.metadata (2.3 kB)
+#9 26.04 Collecting grpcio==1.80.0 (from -r /app/requirements-docker.txt (line 21))
+#9 26.13   Downloading grpcio-1.80.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (3.8 kB)
+#9 27.01 Collecting gunicorn==26.0.0 (from -r /app/requirements-docker.txt (line 22))
+#9 27.10   Downloading gunicorn-26.0.0-py3-none-any.whl.metadata (5.4 kB)
+#9 27.48 Collecting gymnasium==1.2.3 (from -r /app/requirements-docker.txt (line 23))
+#9 27.57   Downloading gymnasium-1.2.3-py3-none-any.whl.metadata (10 kB)
+#9 28.69 Collecting h3==4.4.2 (from -r /app/requirements-docker.txt (line 24))
+#9 28.78   Downloading h3-4.4.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (18 kB)
+#9 29.61 Collecting idna==3.16 (from -r /app/requirements-docker.txt (line 25))
+#9 29.70   Downloading idna-3.16-py3-none-any.whl.metadata (6.4 kB)
+#9 30.51 Collecting Jinja2==3.1.6 (from -r /app/requirements-docker.txt (line 26))
+#9 30.57   Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+#9 31.44 Collecting joblib==1.5.3 (from -r /app/requirements-docker.txt (line 27))
+#9 31.53   Downloading joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
+#9 31.92 Collecting jplephem==2.24 (from -r /app/requirements-docker.txt (line 28))
+#9 32.01   Downloading jplephem-2.24-py3-none-any.whl.metadata (24 kB)
+#9 32.89 Collecting jsonschema==4.26.0 (from -r /app/requirements-docker.txt (line 29))
+#9 32.98   Downloading jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+#9 33.79 Collecting jsonschema-specifications==2025.9.1 (from -r /app/requirements-docker.txt (line 30))
+#9 33.87   Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+#9 35.18 Collecting kiwisolver==1.5.0 (from -r /app/requirements-docker.txt (line 31))
+#9 35.27   Downloading kiwisolver-1.5.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.1 kB)
+#9 36.14 Collecting Markdown==3.10.2 (from -r /app/requirements-docker.txt (line 32))
+#9 36.23   Downloading markdown-3.10.2-py3-none-any.whl.metadata (5.1 kB)
+#9 37.48 Collecting MarkupSafe==3.0.3 (from -r /app/requirements-docker.txt (line 33))
+#9 37.54   Downloading https://download.pytorch.org/whl/markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+#9 39.44 Collecting matplotlib==3.10.9 (from -r /app/requirements-docker.txt (line 34))
+#9 39.53   Downloading matplotlib-3.10.9-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (52 kB)
+#9 40.69 Collecting mpmath==1.3.0 (from -r /app/requirements-docker.txt (line 35))
+#9 40.78   Downloading mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+#9 42.30 Collecting msgpack==1.1.2 (from -r /app/requirements-docker.txt (line 36))
+#9 42.38   Downloading msgpack-1.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.1 kB)
+#9 42.90 Collecting mysqlclient==2.2.8 (from -r /app/requirements-docker.txt (line 37))
+#9 42.99   Downloading mysqlclient-2.2.8.tar.gz (92 kB)
+#9 43.02   Installing build dependencies: started
+#9 47.04   Installing build dependencies: finished with status 'done'
+#9 47.04   Getting requirements to build wheel: started
+#9 47.61   Getting requirements to build wheel: finished with status 'done'
+#9 47.61   Preparing metadata (pyproject.toml): started
+#9 48.16   Preparing metadata (pyproject.toml): finished with status 'done'
+#9 48.88 Collecting narwhals==2.21.2 (from -r /app/requirements-docker.txt (line 38))
+#9 48.96   Downloading narwhals-2.21.2-py3-none-any.whl.metadata (16 kB)
+#9 50.28 Collecting networkx==3.6.1 (from -r /app/requirements-docker.txt (line 39))
+#9 50.37   Downloading networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+#9 54.91 Collecting numpy==2.4.4 (from -r /app/requirements-docker.txt (line 40))
+#9 55.00   Downloading numpy-2.4.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+#9 55.88 Collecting packaging==26.2 (from -r /app/requirements-docker.txt (line 41))
+#9 55.96   Downloading packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
+#9 58.41 Collecting pandas==3.0.3 (from -r /app/requirements-docker.txt (line 42))
+#9 58.49   Downloading pandas-3.0.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
+#9 63.26 Collecting pillow==12.2.0 (from -r /app/requirements-docker.txt (line 43))
+#9 63.34   Downloading pillow-12.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (8.8 kB)
+#9 64.41 Collecting plotly==6.7.0 (from -r /app/requirements-docker.txt (line 44))
+#9 64.50   Downloading plotly-6.7.0-py3-none-any.whl.metadata (8.6 kB)
+#9 67.20 Collecting protobuf==7.35.0 (from -r /app/requirements-docker.txt (line 45))
+#9 67.29   Downloading protobuf-7.35.0-cp310-abi3-manylinux2014_x86_64.whl.metadata (595 bytes)
+#9 67.88 Collecting pyerfa==2.0.1.5 (from -r /app/requirements-docker.txt (line 46))
+#9 67.97   Downloading pyerfa-2.0.1.5-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.7 kB)
+#9 68.55 Collecting pyogrio==0.12.1 (from -r /app/requirements-docker.txt (line 47))
+#9 68.63   Downloading pyogrio-0.12.1-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (5.9 kB)
+#9 69.59 Collecting pyparsing==3.3.2 (from -r /app/requirements-docker.txt (line 48))
+#9 69.67   Downloading pyparsing-3.3.2-py3-none-any.whl.metadata (5.8 kB)
+#9 70.74 Collecting pyproj==3.7.2 (from -r /app/requirements-docker.txt (line 49))
+#9 70.82   Downloading pyproj-3.7.2-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (31 kB)
+#9 71.68 Collecting pyshp==3.0.8 (from -r /app/requirements-docker.txt (line 50))
+#9 71.77   Downloading pyshp-3.0.8-py3-none-any.whl.metadata (66 kB)
+#9 72.20 Collecting python-dateutil==2.9.0.post0 (from -r /app/requirements-docker.txt (line 51))
+#9 72.29   Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+#9 73.43 Collecting PyYAML==6.0.3 (from -r /app/requirements-docker.txt (line 52))
+#9 73.52   Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+#9 75.65 Collecting ray==2.55.1 (from -r /app/requirements-docker.txt (line 53))
+#9 75.74   Downloading ray-2.55.1-cp312-cp312-manylinux2014_x86_64.whl.metadata (21 kB)
+#9 76.73 Collecting referencing==0.37.0 (from -r /app/requirements-docker.txt (line 54))
+#9 76.82   Downloading referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+#9 77.91 Collecting requests==2.34.2 (from -r /app/requirements-docker.txt (line 55))
+#9 78.00   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+#9 81.73 Collecting rpds-py==0.30.0 (from -r /app/requirements-docker.txt (line 56))
+#9 81.82   Downloading rpds_py-0.30.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+#9 82.92 Collecting scikit-learn==1.8.0 (from -r /app/requirements-docker.txt (line 57))
+#9 83.01   Downloading scikit_learn-1.8.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (11 kB)
+#9 84.52 Collecting scipy==1.17.1 (from -r /app/requirements-docker.txt (line 58))
+#9 84.60   Downloading scipy-1.17.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+#9 86.25 Collecting setuptools==70.2.0 (from -r /app/requirements-docker.txt (line 59))
+#9 86.31   Downloading https://download.pytorch.org/whl/setuptools-70.2.0-py3-none-any.whl.metadata (5.8 kB)
+#9 87.45 Collecting sgp4==2.25 (from -r /app/requirements-docker.txt (line 60))
+#9 87.53   Downloading sgp4-2.25-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (33 kB)
+#9 89.20 Collecting shapely==2.1.2 (from -r /app/requirements-docker.txt (line 61))
+#9 89.29   Downloading shapely-2.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.8 kB)
+#9 90.10 Collecting simpy==4.1.2 (from -r /app/requirements-docker.txt (line 62))
+#9 90.19   Downloading simpy-4.1.2-py3-none-any.whl.metadata (6.2 kB)
+#9 90.98 Collecting six==1.17.0 (from -r /app/requirements-docker.txt (line 63))
+#9 91.07   Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+#9 91.95 Collecting skyfield==1.54 (from -r /app/requirements-docker.txt (line 64))
+#9 92.04   Downloading skyfield-1.54-py3-none-any.whl.metadata (2.4 kB)
+#9 92.85 Collecting sqlparse==0.5.5 (from -r /app/requirements-docker.txt (line 65))
+#9 92.93   Downloading sqlparse-0.5.5-py3-none-any.whl.metadata (4.7 kB)
+#9 93.45 Collecting stable_baselines3==2.8.0 (from -r /app/requirements-docker.txt (line 66))
+#9 93.54   Downloading stable_baselines3-2.8.0-py3-none-any.whl.metadata (4.9 kB)
+#9 94.18 Collecting sympy==1.13.1 (from -r /app/requirements-docker.txt (line 67))
+#9 94.26   Downloading sympy-1.13.1-py3-none-any.whl.metadata (12 kB)
+#9 94.69 Collecting tensorboard==2.20.0 (from -r /app/requirements-docker.txt (line 68))
+#9 94.78   Downloading tensorboard-2.20.0-py3-none-any.whl.metadata (1.8 kB)
+#9 95.58 Collecting tensorboard-data-server==0.7.2 (from -r /app/requirements-docker.txt (line 69))
+#9 95.67   Downloading tensorboard_data_server-0.7.2-py3-none-manylinux_2_31_x86_64.whl.metadata (1.1 kB)
+#9 96.50 Collecting threadpoolctl==3.6.0 (from -r /app/requirements-docker.txt (line 70))
+#9 96.59   Downloading threadpoolctl-3.6.0-py3-none-any.whl.metadata (13 kB)
+#9 97.55 Collecting torch==2.6.0+cu124 (from -r /app/requirements-docker.txt (line 71))
+#9 97.73   Downloading https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl.metadata (28 kB)
+#9 98.86 Collecting torchaudio==2.6.0+cu124 (from -r /app/requirements-docker.txt (line 72))
+#9 98.93   Downloading https://download-r2.pytorch.org/whl/cu124/torchaudio-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl.metadata (6.6 kB)
+#9 99.66 Collecting torchvision==0.21.0+cu124 (from -r /app/requirements-docker.txt (line 73))
+#9 99.73   Downloading https://download-r2.pytorch.org/whl/cu124/torchvision-0.21.0%2Bcu124-cp312-cp312-linux_x86_64.whl.metadata (6.1 kB)
+#9 100.5 Collecting triton==3.2.0 (from -r /app/requirements-docker.txt (line 74))
+#9 100.5   Downloading https://download-r2.pytorch.org/whl/triton-3.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (1.4 kB)
+#9 101.0 Collecting typing_extensions==4.15.0 (from -r /app/requirements-docker.txt (line 75))
+#9 101.0   Downloading https://download.pytorch.org/whl/typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+#9 102.0 Collecting urllib3==2.7.0 (from -r /app/requirements-docker.txt (line 76))
+#9 102.1   Downloading urllib3-2.7.0-py3-none-any.whl.metadata (6.9 kB)
+#9 102.7 Collecting Werkzeug==3.1.8 (from -r /app/requirements-docker.txt (line 77))
+#9 102.7   Downloading werkzeug-3.1.8-py3-none-any.whl.metadata (4.0 kB)
+#9 103.5 Collecting celery==5.6.3 (from -r /app/requirements-docker.txt (line 78))
+#9 103.5   Downloading celery-5.6.3-py3-none-any.whl.metadata (23 kB)
+#9 104.3 Collecting django_celery_results==2.6.0 (from -r /app/requirements-docker.txt (line 79))
+#9 104.4   Downloading django_celery_results-2.6.0-py3-none-any.whl.metadata (6.5 kB)
+#9 105.5 Collecting redis==7.4.0 (from -r /app/requirements-docker.txt (line 80))
+#9 105.6   Downloading redis-7.4.0-py3-none-any.whl.metadata (12 kB)
+#9 107.1 Collecting nvidia-cuda-nvrtc-cu12==12.4.127 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 107.1   Downloading https://download.pytorch.org/whl/cu124/nvidia_cuda_nvrtc_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl (24.6 MB)
+#9 107.7      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 24.6/24.6 MB 40.0 MB/s eta 0:00:00
+#9 108.2 Collecting nvidia-cuda-runtime-cu12==12.4.127 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 108.3   Downloading https://download.pytorch.org/whl/cu124/nvidia_cuda_runtime_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl (883 kB)
+#9 108.3      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 883.7/883.7 kB 85.6 MB/s eta 0:00:00
+#9 108.7 Collecting nvidia-cuda-cupti-cu12==12.4.127 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 108.8   Downloading https://download.pytorch.org/whl/cu124/nvidia_cuda_cupti_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl (13.8 MB)
+#9 109.0      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.8/13.8 MB 84.0 MB/s eta 0:00:00
+#9 109.9 Collecting nvidia-cudnn-cu12==9.1.0.70 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 110.0   Downloading https://download.pytorch.org/whl/cu124/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl (664.8 MB)
+#9 118.3      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 664.8/664.8 MB 78.4 MB/s eta 0:00:00
+#9 119.2 Collecting nvidia-cublas-cu12==12.4.5.8 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 119.3   Downloading https://download.pytorch.org/whl/cu124/nvidia_cublas_cu12-12.4.5.8-py3-none-manylinux2014_x86_64.whl (363.4 MB)
+#9 124.2      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 363.4/363.4 MB 75.0 MB/s eta 0:00:00
+#9 124.9 Collecting nvidia-cufft-cu12==11.2.1.3 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 125.0   Downloading https://download.pytorch.org/whl/cu124/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_x86_64.whl (211.5 MB)
+#9 127.8      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 211.5/211.5 MB 75.5 MB/s eta 0:00:00
+#9 128.8 Collecting nvidia-curand-cu12==10.3.5.147 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 128.8   Downloading https://download.pytorch.org/whl/cu124/nvidia_curand_cu12-10.3.5.147-py3-none-manylinux2014_x86_64.whl (56.3 MB)
+#9 129.5      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 56.3/56.3 MB 84.1 MB/s eta 0:00:00
+#9 130.4 Collecting nvidia-cusolver-cu12==11.6.1.9 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 130.4   Downloading https://download.pytorch.org/whl/cu124/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_x86_64.whl (127.9 MB)
+#9 132.2      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 127.9/127.9 MB 74.3 MB/s eta 0:00:00
+#9 132.7 Collecting nvidia-cusparse-cu12==12.3.1.170 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 132.7   Downloading https://download.pytorch.org/whl/cu124/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_x86_64.whl (207.5 MB)
+#9 135.4      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 207.5/207.5 MB 77.4 MB/s eta 0:00:00
+#9 136.4 Collecting nvidia-cusparselt-cu12==0.6.2 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 136.5   Downloading https://download.pytorch.org/whl/cu124/nvidia_cusparselt_cu12-0.6.2-py3-none-manylinux2014_x86_64.whl.metadata (6.8 kB)
+#9 136.9 Collecting nvidia-nccl-cu12==2.21.5 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 136.9   Downloading https://download.pytorch.org/whl/nvidia_nccl_cu12-2.21.5-py3-none-manylinux2014_x86_64.whl (188.7 MB)
+#9 139.3      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 188.7/188.7 MB 80.3 MB/s eta 0:00:00
+#9 140.3 Collecting nvidia-nvtx-cu12==12.4.127 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 140.4   Downloading https://download.pytorch.org/whl/cu124/nvidia_nvtx_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl (99 kB)
+#9 141.2 Collecting nvidia-nvjitlink-cu12==12.4.127 (from torch==2.6.0+cu124->-r /app/requirements-docker.txt (line 71))
+#9 141.3   Downloading https://download.pytorch.org/whl/cu124/nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl (21.1 MB)
+#9 141.8      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 21.1/21.1 MB 43.9 MB/s eta 0:00:00
+#9 142.8 Collecting billiard<5.0,>=4.2.1 (from celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 142.9   Downloading billiard-4.2.4-py3-none-any.whl.metadata (4.8 kB)
+#9 144.0 Collecting kombu>=5.6.0 (from celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 144.1   Downloading kombu-5.6.2-py3-none-any.whl.metadata (3.5 kB)
+#9 145.0 Collecting vine<6.0,>=5.1.0 (from celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 145.1   Downloading vine-5.1.0-py3-none-any.whl.metadata (2.7 kB)
+#9 146.0 Collecting click-didyoumean>=0.3.0 (from celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 146.1   Downloading click_didyoumean-0.3.1-py3-none-any.whl.metadata (3.9 kB)
+#9 147.0 Collecting click-repl>=0.2.0 (from celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 147.1   Downloading click_repl-0.3.0-py3-none-any.whl.metadata (3.6 kB)
+#9 148.0 Collecting click-plugins>=1.1.1 (from celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 148.1   Downloading click_plugins-1.1.1.2-py2.py3-none-any.whl.metadata (6.5 kB)
+#9 149.0 Collecting tzlocal (from celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 149.1   Downloading tzlocal-5.3.1-py3-none-any.whl.metadata (7.6 kB)
+#9 150.2 Collecting prompt-toolkit>=3.0.36 (from click-repl>=0.2.0->celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 150.3   Downloading prompt_toolkit-3.0.52-py3-none-any.whl.metadata (6.4 kB)
+#9 151.4 Collecting amqp<6.0.0,>=5.1.1 (from kombu>=5.6.0->celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 151.5   Downloading amqp-5.3.1-py3-none-any.whl.metadata (8.9 kB)
+#9 152.3 Collecting tzdata>=2025.2 (from kombu>=5.6.0->celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 152.4   Downloading tzdata-2026.2-py2.py3-none-any.whl.metadata (1.4 kB)
+#9 152.8 Collecting wcwidth (from prompt-toolkit>=3.0.36->click-repl>=0.2.0->celery==5.6.3->-r /app/requirements-docker.txt (line 78))
+#9 152.9   Downloading wcwidth-0.8.1-py3-none-any.whl.metadata (43 kB)
+#9 153.0 Downloading absl_py-2.4.0-py3-none-any.whl (135 kB)
+#9 153.2 Downloading asgiref-3.11.1-py3-none-any.whl (24 kB)
+#9 153.3 Downloading astropy-7.2.0-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (9.8 MB)
+#9 157.9    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.8/9.8 MB 2.2 MB/s eta 0:00:00
+#9 158.0 Downloading astropy_iers_data-0.2026.5.25.1.14.13-py3-none-any.whl (2.0 MB)
+#9 158.8    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 2.3 MB/s eta 0:00:00
+#9 158.9 Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+#9 159.0 Downloading cartopy-0.25.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (11.8 MB)
+#9 165.9    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.8/11.8 MB 1.7 MB/s eta 0:00:00
+#9 166.0 Downloading certifi-2026.5.20-py3-none-any.whl (134 kB)
+#9 166.1 Downloading charset_normalizer-3.4.7-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (216 kB)
+#9 166.3 Downloading click-8.4.1-py3-none-any.whl (116 kB)
+#9 166.5 Downloading cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+#9 166.6 Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (362 kB)
+#9 166.8 Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+#9 166.9 Downloading django-6.0.5-py3-none-any.whl (8.4 MB)
+#9 170.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.4/8.4 MB 2.2 MB/s eta 0:00:00
+#9 170.8 Downloading django_cors_headers-4.9.0-py3-none-any.whl (12 kB)
+#9 170.9 Downloading djangorestframework-3.17.1-py3-none-any.whl (898 kB)
+#9 171.1    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 898.8/898.8 kB 3.2 MB/s eta 0:00:00
+#9 171.2 Downloading farama_notifications-0.0.6-py3-none-any.whl (2.9 kB)
+#9 171.3 Downloading filelock-3.29.0-py3-none-any.whl (39 kB)
+#9 171.4 Downloading fonttools-4.63.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.0 MB)
+#9 172.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.0/5.0 MB 3.9 MB/s eta 0:00:00
+#9 172.8 Downloading fsspec-2026.4.0-py3-none-any.whl (203 kB)
+#9 172.9 Downloading geopandas-1.1.3-py3-none-any.whl (342 kB)
+#9 173.1 Downloading grpcio-1.80.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (6.8 MB)
+#9 174.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.8/6.8 MB 5.4 MB/s eta 0:00:00
+#9 174.4 Downloading gunicorn-26.0.0-py3-none-any.whl (212 kB)
+#9 174.6 Downloading gymnasium-1.2.3-py3-none-any.whl (952 kB)
+#9 174.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 952.1/952.1 kB 6.6 MB/s eta 0:00:00
+#9 174.8 Downloading h3-4.4.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.0 MB)
+#9 174.9    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.0/1.0 MB 7.1 MB/s eta 0:00:00
+#9 175.0 Downloading idna-3.16-py3-none-any.whl (74 kB)
+#9 175.1 Downloading https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl (134 kB)
+#9 175.2 Downloading joblib-1.5.3-py3-none-any.whl (309 kB)
+#9 175.3 Downloading jplephem-2.24-py3-none-any.whl (49 kB)
+#9 175.4 Downloading jsonschema-4.26.0-py3-none-any.whl (90 kB)
+#9 175.5 Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+#9 175.6 Downloading kiwisolver-1.5.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.5 MB)
+#9 175.8    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 7.0 MB/s eta 0:00:00
+#9 175.9 Downloading markdown-3.10.2-py3-none-any.whl (108 kB)
+#9 175.9 Downloading https://download.pytorch.org/whl/markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+#9 176.0 Downloading matplotlib-3.10.9-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (8.8 MB)
+#9 177.3    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.8/8.8 MB 7.1 MB/s eta 0:00:00
+#9 177.3 Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
+#9 177.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 536.2/536.2 kB 8.3 MB/s eta 0:00:00
+#9 177.5 Downloading msgpack-1.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (427 kB)
+#9 177.6 Downloading narwhals-2.21.2-py3-none-any.whl (451 kB)
+#9 177.8 Downloading networkx-3.6.1-py3-none-any.whl (2.1 MB)
+#9 178.1    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 7.0 MB/s eta 0:00:00
+#9 178.2 Downloading numpy-2.4.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.6 MB)
+#9 180.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.6/16.6 MB 6.5 MB/s eta 0:00:00
+#9 180.8 Downloading packaging-26.2-py3-none-any.whl (100 kB)
+#9 180.9 Downloading pandas-3.0.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (10.9 MB)
+#9 182.6    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.9/10.9 MB 6.5 MB/s eta 0:00:00
+#9 182.7 Downloading pillow-12.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (7.1 MB)
+#9 184.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.1/7.1 MB 5.4 MB/s eta 0:00:00
+#9 184.1 Downloading plotly-6.7.0-py3-none-any.whl (9.9 MB)
+#9 185.9    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.9/9.9 MB 5.4 MB/s eta 0:00:00
+#9 186.0 Downloading protobuf-7.35.0-cp310-abi3-manylinux2014_x86_64.whl (327 kB)
+#9 186.1 Downloading pyerfa-2.0.1.5-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (738 kB)
+#9 186.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 738.7/738.7 kB 1.8 MB/s eta 0:00:00
+#9 186.5 Downloading pyogrio-0.12.1-cp312-cp312-manylinux_2_28_x86_64.whl (32.5 MB)
+#9 196.1    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 32.5/32.5 MB 3.4 MB/s eta 0:00:00
+#9 196.2 Downloading pyparsing-3.3.2-py3-none-any.whl (122 kB)
+#9 196.3 Downloading pyproj-3.7.2-cp312-cp312-manylinux_2_28_x86_64.whl (9.6 MB)
+#9 199.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.6/9.6 MB 3.6 MB/s eta 0:00:00
+#9 199.0 Downloading pyshp-3.0.8-py3-none-any.whl (61 kB)
+#9 199.1 Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+#9 199.3 Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+#9 199.5    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 3.6 MB/s eta 0:00:00
+#9 199.6 Downloading ray-2.55.1-cp312-cp312-manylinux2014_x86_64.whl (73.8 MB)
+#9 227.6    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.8/73.8 MB 2.6 MB/s eta 0:00:00
+#9 227.7 Downloading referencing-0.37.0-py3-none-any.whl (26 kB)
+#9 227.8 Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+#9 227.9 Downloading rpds_py-0.30.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (394 kB)
+#9 228.1 Downloading scikit_learn-1.8.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (8.9 MB)
+#9 231.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.9/8.9 MB 2.7 MB/s eta 0:00:00
+#9 231.5 Downloading scipy-1.17.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.2 MB)
+#9 241.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.2/35.2 MB 3.5 MB/s eta 0:00:00
+#9 241.7 Downloading https://download.pytorch.org/whl/setuptools-70.2.0-py3-none-any.whl (930 kB)
+#9 241.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 930.8/930.8 kB 108.8 MB/s eta 0:00:00
+#9 241.8 Downloading sgp4-2.25-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (235 kB)
+#9 242.0 Downloading shapely-2.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.1 MB)
+#9 242.5    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.1/3.1 MB 5.6 MB/s eta 0:00:00
+#9 242.6 Downloading simpy-4.1.2-py3-none-any.whl (27 kB)
+#9 242.7 Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+#9 242.8 Downloading skyfield-1.54-py3-none-any.whl (370 kB)
+#9 242.9 Downloading sqlparse-0.5.5-py3-none-any.whl (46 kB)
+#9 243.0 Downloading stable_baselines3-2.8.0-py3-none-any.whl (187 kB)
+#9 243.1 Downloading sympy-1.13.1-py3-none-any.whl (6.2 MB)
+#9 244.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.2/6.2 MB 6.6 MB/s eta 0:00:00
+#9 244.1 Downloading tensorboard-2.20.0-py3-none-any.whl (5.5 MB)
+#9 244.8    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.5/5.5 MB 7.8 MB/s eta 0:00:00
+#9 244.9 Downloading tensorboard_data_server-0.7.2-py3-none-manylinux_2_31_x86_64.whl (6.6 MB)
+#9 245.7    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.6/6.6 MB 8.3 MB/s eta 0:00:00
+#9 245.8 Downloading threadpoolctl-3.6.0-py3-none-any.whl (18 kB)
+#9 245.9 Downloading https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl (768.4 MB)
+#9 257.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 768.4/768.4 MB 74.9 MB/s eta 0:00:00
+#9 257.4 Downloading https://download-r2.pytorch.org/whl/cu124/torchaudio-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl (3.4 MB)
+#9 257.5    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 75.6 MB/s eta 0:00:00
+#9 257.5 Downloading https://download-r2.pytorch.org/whl/cu124/torchvision-0.21.0%2Bcu124-cp312-cp312-linux_x86_64.whl (7.3 MB)
+#9 257.6    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.3/7.3 MB 80.6 MB/s eta 0:00:00
+#9 257.7 Downloading https://download-r2.pytorch.org/whl/triton-3.2.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (166.7 MB)
+#9 259.9    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 166.7/166.7 MB 76.0 MB/s eta 0:00:00
+#9 259.9 Downloading https://download.pytorch.org/whl/typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+#9 260.0 Downloading urllib3-2.7.0-py3-none-any.whl (131 kB)
+#9 260.1 Downloading werkzeug-3.1.8-py3-none-any.whl (226 kB)
+#9 260.2 Downloading celery-5.6.3-py3-none-any.whl (451 kB)
+#9 260.4 Downloading django_celery_results-2.6.0-py3-none-any.whl (38 kB)
+#9 260.5 Downloading redis-7.4.0-py3-none-any.whl (409 kB)
+#9 260.6 Downloading https://download.pytorch.org/whl/cu124/nvidia_cusparselt_cu12-0.6.2-py3-none-manylinux2014_x86_64.whl (150.1 MB)
+#9 262.4    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 150.1/150.1 MB 82.8 MB/s eta 0:00:00
+#9 262.5 Downloading billiard-4.2.4-py3-none-any.whl (87 kB)
+#9 262.6 Downloading click_didyoumean-0.3.1-py3-none-any.whl (3.6 kB)
+#9 262.7 Downloading click_plugins-1.1.1.2-py2.py3-none-any.whl (11 kB)
+#9 262.8 Downloading click_repl-0.3.0-py3-none-any.whl (10 kB)
+#9 262.8 Downloading kombu-5.6.2-py3-none-any.whl (214 kB)
+#9 263.0 Downloading vine-5.1.0-py3-none-any.whl (9.6 kB)
+#9 263.0 Downloading tzlocal-5.3.1-py3-none-any.whl (18 kB)
+#9 263.1 Downloading amqp-5.3.1-py3-none-any.whl (50 kB)
+#9 263.2 Downloading prompt_toolkit-3.0.52-py3-none-any.whl (391 kB)
+#9 263.4 Downloading tzdata-2026.2-py2.py3-none-any.whl (349 kB)
+#9 263.5 Downloading wcwidth-0.8.1-py3-none-any.whl (323 kB)
+#9 264.9 Building wheels for collected packages: mysqlclient
+#9 264.9   Building wheel for mysqlclient (pyproject.toml): started
+#9 266.3   Building wheel for mysqlclient (pyproject.toml): finished with status 'done'
+#9 266.3   Created wheel for mysqlclient: filename=mysqlclient-2.2.8-cp312-cp312-linux_x86_64.whl size=138632 sha256=acba58d1a1dacf5917f6b715d0c5b19a6b8e694c654725135af4fe9be3859ca3
+#9 266.3   Stored in directory: /tmp/pip-ephem-wheel-cache-p8anq3d9/wheels/b0/62/00/46e65ad9151c1266f0f03ea020a5a8ea1cbc6e4ebf3329e276
+#9 266.3 Successfully built mysqlclient
+#9 266.6 Installing collected packages: triton, sgp4, nvidia-cusparselt-cu12, mpmath, Farama-Notifications, wcwidth, vine, urllib3, tzlocal, tzdata, typing_extensions, threadpoolctl, tensorboard-data-server, sympy, sqlparse, six, simpy, setuptools, rpds-py, redis, PyYAML, pyshp, pyparsing, protobuf, pillow, packaging, nvidia-nvtx-cu12, nvidia-nvjitlink-cu12, nvidia-nccl-cu12, nvidia-curand-cu12, nvidia-cufft-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cuda-cupti-cu12, nvidia-cublas-cu12, numpy, networkx, narwhals, mysqlclient, msgpack, MarkupSafe, Markdown, kiwisolver, joblib, idna, h3, fsspec, fonttools, filelock, cycler, cloudpickle, click, charset-normalizer, certifi, billiard, attrs, astropy-iers-data, asgiref, absl-py, Werkzeug, shapely, scipy, requests, referencing, python-dateutil, pyproj, pyogrio, pyerfa, prompt-toolkit, plotly, nvidia-cusparse-cu12, nvidia-cudnn-cu12, jplephem, Jinja2, gymnasium, gunicorn, grpcio, Django, contourpy, click-plugins, click-didyoumean, amqp, tensorboard, skyfield, scikit-learn, pandas, nvidia-cusolver-cu12, matplotlib, kombu, jsonschema-specifications, djangorestframework, django-cors-headers, click-repl, astropy, torch, jsonschema, geopandas, celery, Cartopy, torchvision, torchaudio, stable_baselines3, ray, django_celery_results
+#9 355.6 Successfully installed Cartopy-0.25.0 Django-6.0.5 Farama-Notifications-0.0.6 Jinja2-3.1.6 Markdown-3.10.2 MarkupSafe-3.0.3 PyYAML-6.0.3 Werkzeug-3.1.8 absl-py-2.4.0 amqp-5.3.1 asgiref-3.11.1 astropy-7.2.0 astropy-iers-data-0.2026.5.25.1.14.13 attrs-26.1.0 billiard-4.2.4 celery-5.6.3 certifi-2026.5.20 charset-normalizer-3.4.7 click-8.4.1 click-didyoumean-0.3.1 click-plugins-1.1.1.2 click-repl-0.3.0 cloudpickle-3.1.2 contourpy-1.3.3 cycler-0.12.1 django-cors-headers-4.9.0 django_celery_results-2.6.0 djangorestframework-3.17.1 filelock-3.29.0 fonttools-4.63.0 fsspec-2026.4.0 geopandas-1.1.3 grpcio-1.80.0 gunicorn-26.0.0 gymnasium-1.2.3 h3-4.4.2 idna-3.16 joblib-1.5.3 jplephem-2.24 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 kiwisolver-1.5.0 kombu-5.6.2 matplotlib-3.10.9 mpmath-1.3.0 msgpack-1.1.2 mysqlclient-2.2.8 narwhals-2.21.2 networkx-3.6.1 numpy-2.4.4 nvidia-cublas-cu12-12.4.5.8 nvidia-cuda-cupti-cu12-12.4.127 nvidia-cuda-nvrtc-cu12-12.4.127 nvidia-cuda-runtime-cu12-12.4.127 nvidia-cudnn-cu12-9.1.0.70 nvidia-cufft-cu12-11.2.1.3 nvidia-curand-cu12-10.3.5.147 nvidia-cusolver-cu12-11.6.1.9 nvidia-cusparse-cu12-12.3.1.170 nvidia-cusparselt-cu12-0.6.2 nvidia-nccl-cu12-2.21.5 nvidia-nvjitlink-cu12-12.4.127 nvidia-nvtx-cu12-12.4.127 packaging-26.2 pandas-3.0.3 pillow-12.2.0 plotly-6.7.0 prompt-toolkit-3.0.52 protobuf-7.35.0 pyerfa-2.0.1.5 pyogrio-0.12.1 pyparsing-3.3.2 pyproj-3.7.2 pyshp-3.0.8 python-dateutil-2.9.0.post0 ray-2.55.1 redis-7.4.0 referencing-0.37.0 requests-2.34.2 rpds-py-0.30.0 scikit-learn-1.8.0 scipy-1.17.1 setuptools-70.2.0 sgp4-2.25 shapely-2.1.2 simpy-4.1.2 six-1.17.0 skyfield-1.54 sqlparse-0.5.5 stable_baselines3-2.8.0 sympy-1.13.1 tensorboard-2.20.0 tensorboard-data-server-0.7.2 threadpoolctl-3.6.0 torch-2.6.0+cu124 torchaudio-2.6.0+cu124 torchvision-0.21.0+cu124 triton-3.2.0 typing_extensions-4.15.0 tzdata-2026.2 tzlocal-5.3.1 urllib3-2.7.0 vine-5.1.0 wcwidth-0.8.1
+#9 355.6 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#9 356.7 
+#9 356.7 [notice] A new release of pip is available: 25.0.1 -> 26.1.2
+#9 356.7 [notice] To update, run: pip install --upgrade pip
+#9 DONE 359.0s
+
+#10 [6/7] COPY . /app
+#10 DONE 0.5s
+
+#11 [7/7] RUN chmod +x /app/entrypoint.sh
+#11 DONE 0.3s
+
+#12 exporting to image
+#12 exporting layers
+#12 exporting layers 192.0s done
+#12 exporting manifest sha256:7f3c2dfa9cf464cac1039c6a4ab54edaf3d86cc58afa4b4912f844cd8a8ac326 0.0s done
+#12 exporting config sha256:1bf4e13fa0945f49f6b48d1f923163fc3ae9d4a06b2d4c47f78c3d8c56a0268a done
+#12 exporting attestation manifest sha256:247580a9d6df1aff4de8940d8d8dbfd386bd9846ba97f3938a7230cfe95aad21 0.0s done
+#12 exporting manifest list sha256:53784e82da5741dc510b940ce214e088b80b353b7b05bd1bed29c2ecd813af68 0.0s done
+#12 naming to docker.io/library/satellites_security_backend:latest done
+#12 unpacking to docker.io/library/satellites_security_backend:latest
+#12 unpacking to docker.io/library/satellites_security_backend:latest 46.6s done
+#12 DONE 238.8s

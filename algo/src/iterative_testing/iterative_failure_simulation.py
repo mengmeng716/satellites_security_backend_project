@@ -1,12 +1,15 @@
 import argparse
+import csv
 import copy
 import io
 import itertools
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Sequence as ABCSequence
 from datetime import datetime
 from pathlib import Path
@@ -69,6 +72,61 @@ DEFAULT_ONLINE_THRESHOLD_CALIBRATION_CONFIG: Dict[str, Any] = {
         "high_support": {
             "update_mode": "full_update",
         },
+    },
+}
+DEFAULT_LOW_FAILURE_REGIME_CONFIG: Dict[str, Any] = {
+    "enabled": "on",
+    "fallback_policy": "dual_threshold_v2",
+    "trigger": {
+        "min_effective_support": "",
+        "require_both_classes_in_train": "on",
+        "min_fused_holdout_auc": 0.55,
+        "enable_zero_prediction_guard": "on",
+    },
+    "allow_small_sample_fused_experiment": "off",
+    "small_sample_threshold_min_support": 12,
+}
+DEFAULT_PRESSURE_ROUTER_CONFIG: Dict[str, Any] = {
+    "enabled": "on",
+    "high_pressure_threshold": 0.45,
+    "bandwidth_std_norm_max": 0.20,
+    "score_formula": {
+        "degraded_edge_ratio_weight": 0.40,
+        "edge_disconnect_ratio_weight": 0.35,
+        "edge_bandwidth_mean_decrease_ratio_weight": 0.20,
+        "edge_bandwidth_decrease_std_norm_weight": 0.05,
+    },
+    "override": {
+        "enabled": "on",
+        "apply_scope": "next_round_only",
+        "scope": "session",
+        "high_risk_decision_threshold": 0.30,
+        "high_risk_terminal_threshold": 0.50,
+        "upgrade_if_batch_failure_ratio_ge": 0.20,
+        "upgrade_if_batch_high_risk_ratio_ge": 0.35,
+    },
+}
+DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG: Dict[str, Any] = {
+    "enabled": "on",
+    "model_type": "mlp",
+    "hidden_dim": 16,
+    "dropout": 0.10,
+    "learning_rate": 5e-4,
+    "weight_decay": 1e-4,
+    "epochs": 200,
+    "batch_size": 16,
+    "patience": 20,
+    "pos_weight": 20.0,
+    "holdout_ratio": 0.20,
+    "feature_set": "summary_v1",
+    "threshold": {
+        "objective": "recall_at_precision",
+        "min_precision": 0.50,
+    },
+    "fallback": {
+        "min_effective_support": 12,
+        "require_both_classes_in_train": "on",
+        "policy": "dual_threshold_v2",
     },
 }
 DEFAULT_DISTRIBUTION_BALANCE_GUARD_CONFIG: Dict[str, Any] = {
@@ -839,6 +897,223 @@ def resolve_exploration_settings(
         normalized_profiles[profile_name] = merged_profile
     guard_cfg["constellation_profiles"] = normalized_profiles
 
+    low_failure_cfg = _merge_nested_mapping(
+        DEFAULT_LOW_FAILURE_REGIME_CONFIG,
+        payload.get("low_failure_regime", {})
+        if isinstance(payload.get("low_failure_regime", {}), Mapping)
+        else {},
+    )
+    low_failure_cfg["enabled"] = normalize_switch_text(
+        low_failure_cfg.get("enabled"),
+        default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["enabled"]),
+    )
+    fallback_policy = str(
+        low_failure_cfg.get("fallback_policy", DEFAULT_LOW_FAILURE_REGIME_CONFIG["fallback_policy"])
+    ).strip().lower()
+    if fallback_policy != "dual_threshold_v2":
+        fallback_policy = str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["fallback_policy"])
+    low_failure_cfg["fallback_policy"] = fallback_policy
+    trigger_defaults = dict(DEFAULT_LOW_FAILURE_REGIME_CONFIG["trigger"])
+    trigger_cfg = dict(low_failure_cfg.get("trigger", {}))
+    min_effective_support_raw = trigger_cfg.get("min_effective_support", trigger_defaults["min_effective_support"])
+    if min_effective_support_raw in (None, ""):
+        trigger_cfg["min_effective_support"] = ""
+    else:
+        trigger_cfg["min_effective_support"] = _normalize_int(
+            min_effective_support_raw,
+            default=int(getattr(args, "threshold_min_support", 30)),
+            min_value=2,
+        )
+    trigger_cfg["require_both_classes_in_train"] = normalize_switch_text(
+        trigger_cfg.get("require_both_classes_in_train"),
+        default=str(trigger_defaults["require_both_classes_in_train"]),
+    )
+    trigger_cfg["min_fused_holdout_auc"] = _normalize_float(
+        trigger_cfg.get("min_fused_holdout_auc"),
+        default=float(trigger_defaults["min_fused_holdout_auc"]),
+        min_value=0.0,
+        max_value=1.0,
+    )
+    trigger_cfg["enable_zero_prediction_guard"] = normalize_switch_text(
+        trigger_cfg.get("enable_zero_prediction_guard"),
+        default=str(trigger_defaults["enable_zero_prediction_guard"]),
+    )
+    low_failure_cfg["trigger"] = trigger_cfg
+    low_failure_cfg["allow_small_sample_fused_experiment"] = normalize_switch_text(
+        low_failure_cfg.get("allow_small_sample_fused_experiment"),
+        default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["allow_small_sample_fused_experiment"]),
+    )
+    low_failure_cfg["small_sample_threshold_min_support"] = _normalize_int(
+        low_failure_cfg.get("small_sample_threshold_min_support"),
+        default=int(DEFAULT_LOW_FAILURE_REGIME_CONFIG["small_sample_threshold_min_support"]),
+        min_value=2,
+    )
+
+    pressure_router_cfg = _merge_nested_mapping(
+        DEFAULT_PRESSURE_ROUTER_CONFIG,
+        payload.get("pressure_router", {})
+        if isinstance(payload.get("pressure_router", {}), Mapping)
+        else {},
+    )
+    pressure_router_cfg["enabled"] = normalize_switch_text(
+        pressure_router_cfg.get("enabled"),
+        default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["enabled"]),
+    )
+    pressure_router_cfg["high_pressure_threshold"] = _normalize_float(
+        pressure_router_cfg.get("high_pressure_threshold"),
+        default=float(DEFAULT_PRESSURE_ROUTER_CONFIG["high_pressure_threshold"]),
+        min_value=0.0,
+        max_value=1.0,
+    )
+    pressure_router_cfg["bandwidth_std_norm_max"] = _normalize_float(
+        pressure_router_cfg.get("bandwidth_std_norm_max"),
+        default=float(DEFAULT_PRESSURE_ROUTER_CONFIG["bandwidth_std_norm_max"]),
+        min_value=1e-6,
+    )
+    pressure_formula_cfg = dict(pressure_router_cfg.get("score_formula", {}))
+    for key, default_value in dict(DEFAULT_PRESSURE_ROUTER_CONFIG["score_formula"]).items():
+        pressure_formula_cfg[key] = _normalize_float(
+            pressure_formula_cfg.get(key),
+            default=float(default_value),
+            min_value=0.0,
+            max_value=1.0,
+        )
+    pressure_router_cfg["score_formula"] = pressure_formula_cfg
+    pressure_override_cfg = dict(pressure_router_cfg.get("override", {}))
+    pressure_override_defaults = dict(DEFAULT_PRESSURE_ROUTER_CONFIG["override"])
+    pressure_override_cfg["enabled"] = normalize_switch_text(
+        pressure_override_cfg.get("enabled"),
+        default=str(pressure_override_defaults["enabled"]),
+    )
+    apply_scope = str(pressure_override_cfg.get("apply_scope", pressure_override_defaults["apply_scope"])).strip().lower()
+    if apply_scope != "next_round_only":
+        apply_scope = str(pressure_override_defaults["apply_scope"])
+    pressure_override_cfg["apply_scope"] = apply_scope
+    scope_text = str(pressure_override_cfg.get("scope", pressure_override_defaults["scope"])).strip().lower()
+    if scope_text != "session":
+        scope_text = str(pressure_override_defaults["scope"])
+    pressure_override_cfg["scope"] = scope_text
+    pressure_override_cfg["high_risk_decision_threshold"] = _normalize_float(
+        pressure_override_cfg.get("high_risk_decision_threshold"),
+        default=float(pressure_override_defaults["high_risk_decision_threshold"]),
+        min_value=0.0,
+        max_value=1.0,
+    )
+    pressure_override_cfg["high_risk_terminal_threshold"] = _normalize_float(
+        pressure_override_cfg.get("high_risk_terminal_threshold"),
+        default=float(pressure_override_defaults["high_risk_terminal_threshold"]),
+        min_value=0.0,
+        max_value=1.0,
+    )
+    pressure_override_cfg["upgrade_if_batch_failure_ratio_ge"] = _normalize_float(
+        pressure_override_cfg.get("upgrade_if_batch_failure_ratio_ge"),
+        default=float(pressure_override_defaults["upgrade_if_batch_failure_ratio_ge"]),
+        min_value=0.0,
+        max_value=1.0,
+    )
+    pressure_override_cfg["upgrade_if_batch_high_risk_ratio_ge"] = _normalize_float(
+        pressure_override_cfg.get("upgrade_if_batch_high_risk_ratio_ge"),
+        default=float(pressure_override_defaults["upgrade_if_batch_high_risk_ratio_ge"]),
+        min_value=0.0,
+        max_value=1.0,
+    )
+    pressure_router_cfg["override"] = pressure_override_cfg
+
+    low_pressure_cfg = _merge_nested_mapping(
+        DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG,
+        payload.get("low_pressure_classifier", {})
+        if isinstance(payload.get("low_pressure_classifier", {}), Mapping)
+        else {},
+    )
+    low_pressure_cfg["enabled"] = normalize_switch_text(
+        low_pressure_cfg.get("enabled"),
+        default=str(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["enabled"]),
+    )
+    model_type = str(low_pressure_cfg.get("model_type", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["model_type"])).strip().lower()
+    if model_type != "mlp":
+        model_type = str(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["model_type"])
+    low_pressure_cfg["model_type"] = model_type
+    low_pressure_cfg["hidden_dim"] = _normalize_int(
+        low_pressure_cfg.get("hidden_dim"),
+        default=int(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["hidden_dim"]),
+        min_value=4,
+    )
+    low_pressure_cfg["dropout"] = _normalize_float(
+        low_pressure_cfg.get("dropout"),
+        default=float(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["dropout"]),
+        min_value=0.0,
+        max_value=0.9,
+    )
+    low_pressure_cfg["learning_rate"] = _normalize_float(
+        low_pressure_cfg.get("learning_rate"),
+        default=float(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["learning_rate"]),
+        min_value=1e-6,
+    )
+    low_pressure_cfg["weight_decay"] = _normalize_float(
+        low_pressure_cfg.get("weight_decay"),
+        default=float(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["weight_decay"]),
+        min_value=0.0,
+    )
+    low_pressure_cfg["epochs"] = _normalize_int(
+        low_pressure_cfg.get("epochs"),
+        default=int(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["epochs"]),
+        min_value=1,
+    )
+    low_pressure_cfg["batch_size"] = _normalize_int(
+        low_pressure_cfg.get("batch_size"),
+        default=int(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["batch_size"]),
+        min_value=1,
+    )
+    low_pressure_cfg["patience"] = _normalize_int(
+        low_pressure_cfg.get("patience"),
+        default=int(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["patience"]),
+        min_value=1,
+    )
+    low_pressure_cfg["pos_weight"] = _normalize_float(
+        low_pressure_cfg.get("pos_weight"),
+        default=float(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["pos_weight"]),
+        min_value=1.0,
+    )
+    low_pressure_cfg["holdout_ratio"] = _normalize_float(
+        low_pressure_cfg.get("holdout_ratio"),
+        default=float(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["holdout_ratio"]),
+        min_value=0.0,
+        max_value=0.49,
+    )
+    feature_set = str(low_pressure_cfg.get("feature_set", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["feature_set"])).strip().lower()
+    if feature_set != "summary_v1":
+        feature_set = str(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["feature_set"])
+    low_pressure_cfg["feature_set"] = feature_set
+    low_pressure_threshold_cfg = dict(low_pressure_cfg.get("threshold", {}))
+    low_pressure_threshold_defaults = dict(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["threshold"])
+    low_pressure_threshold_cfg["objective"] = _normalize_threshold_objective(
+        low_pressure_threshold_cfg.get("objective"),
+        default=str(low_pressure_threshold_defaults["objective"]),
+    )
+    low_pressure_threshold_cfg["min_precision"] = _normalize_float(
+        low_pressure_threshold_cfg.get("min_precision"),
+        default=float(low_pressure_threshold_defaults["min_precision"]),
+        min_value=0.0,
+        max_value=1.0,
+    )
+    low_pressure_cfg["threshold"] = low_pressure_threshold_cfg
+    low_pressure_fallback_cfg = dict(low_pressure_cfg.get("fallback", {}))
+    low_pressure_fallback_defaults = dict(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["fallback"])
+    low_pressure_fallback_cfg["min_effective_support"] = _normalize_int(
+        low_pressure_fallback_cfg.get("min_effective_support"),
+        default=int(low_pressure_fallback_defaults["min_effective_support"]),
+        min_value=2,
+    )
+    low_pressure_fallback_cfg["require_both_classes_in_train"] = normalize_switch_text(
+        low_pressure_fallback_cfg.get("require_both_classes_in_train"),
+        default=str(low_pressure_fallback_defaults["require_both_classes_in_train"]),
+    )
+    low_pressure_policy = str(low_pressure_fallback_cfg.get("policy", low_pressure_fallback_defaults["policy"])).strip().lower()
+    if low_pressure_policy != "dual_threshold_v2":
+        low_pressure_policy = str(low_pressure_fallback_defaults["policy"])
+    low_pressure_fallback_cfg["policy"] = low_pressure_policy
+    low_pressure_cfg["fallback"] = low_pressure_fallback_cfg
+
     configured_attack_types = normalize_single_attack_types(payload.get("single_attack_types", []))
 
     return {
@@ -847,6 +1122,9 @@ def resolve_exploration_settings(
         "post_run_rolling_drift_analysis": rolling_cfg,
         "online_threshold_calibration": threshold_calibration_cfg,
         "distribution_balance_guard": guard_cfg,
+        "low_failure_regime": low_failure_cfg,
+        "pressure_router": pressure_router_cfg,
+        "low_pressure_classifier": low_pressure_cfg,
     }
 
 
@@ -1073,6 +1351,15 @@ class ClosedLoopFailureSimulation:
         self.distribution_balance_guard_config = dict(
             self.exploration_settings.get("distribution_balance_guard", {})
         )
+        self.low_failure_regime_config = dict(
+            self.exploration_settings.get("low_failure_regime", {})
+        )
+        self.pressure_router_config = dict(
+            self.exploration_settings.get("pressure_router", {})
+        )
+        self.low_pressure_classifier_config = dict(
+            self.exploration_settings.get("low_pressure_classifier", {})
+        )
         self.threshold_split_seed = int(self.threshold_split_config.get("random_seed", random_seed))
         self.args.threshold_objective = _normalize_threshold_objective(
             getattr(self.args, "threshold_objective", "") or self.threshold_calibration_config.get("objective"),
@@ -1185,6 +1472,19 @@ class ClosedLoopFailureSimulation:
             "final_threshold": 0.5,
         }
         self.last_threshold_stats: Dict[str, object] = {}
+        self.last_low_pressure_model_info: Dict[str, object] = {
+            "low_pressure_model_status": "disabled",
+            "low_pressure_model_holdout_record_count": 0,
+            "low_pressure_model_holdout_auc": 0.0,
+            "low_pressure_model_holdout_accuracy": 0.0,
+            "low_pressure_model_type": str(self.low_pressure_classifier_config.get("model_type", "mlp")).strip().lower(),
+            "low_pressure_model_input_mean": [],
+            "low_pressure_model_input_std": [],
+            "low_pressure_model_mlp_state": {},
+            "low_pressure_model_hidden_dim": int(self.low_pressure_classifier_config.get("hidden_dim", 16)),
+            "low_pressure_threshold": 0.5,
+        }
+        self.last_low_pressure_threshold_stats: Dict[str, object] = {}
         self.post_run_offline_recompute_summary: Optional[Dict[str, object]] = None
         self.accuracy_guard_summary: Dict[str, object] = {}
         self.rolling_drift_analysis_summary: Optional[Dict[str, object]] = None
@@ -1211,6 +1511,31 @@ class ClosedLoopFailureSimulation:
             "consecutive_shortage_flag_rounds": 0,
             "consecutive_triggered_rounds": 0,
             "consecutive_healthy_recovered_rounds": 0,
+        }
+        self.low_failure_regime_state: Dict[str, object] = {
+            "enabled": normalize_switch_text(
+                self.low_failure_regime_config.get("enabled"),
+                default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["enabled"]),
+            ),
+            "fallback_applied": False,
+            "fallback_reason": "",
+            "effective_decision_mode": self.failure_decision_mode,
+        }
+        self.pressure_router_state: Dict[str, object] = {
+            "router_enabled": normalize_switch_text(
+                self.pressure_router_config.get("enabled"),
+                default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["enabled"]),
+            ),
+            "override_enabled": normalize_switch_text(
+                dict(self.pressure_router_config.get("override", {})).get("enabled"),
+                default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["override"]["enabled"]),
+            ),
+            "pending_override_signal": "keep",
+            "pending_override_apply_round": None,
+            "last_round_batch_failure_ratio": 0.0,
+            "last_round_batch_high_risk_ratio": 0.0,
+            "last_round_override_signal": "keep",
+            "last_round_override_applied_to_next_round": False,
         }
 
         if self.checkpoint_path.exists() and not self.args.reset_state:
@@ -1264,6 +1589,12 @@ class ClosedLoopFailureSimulation:
         self.last_decision_model_info = dict(state.get("last_decision_model_info", self.last_decision_model_info))
         self.last_failure_model_info = dict(state.get("last_failure_model_info", self.last_failure_model_info))
         self.last_threshold_stats = dict(state.get("last_threshold_stats", self.last_threshold_stats))
+        self.last_low_pressure_model_info = dict(
+            state.get("last_low_pressure_model_info", self.last_low_pressure_model_info)
+        )
+        self.last_low_pressure_threshold_stats = dict(
+            state.get("last_low_pressure_threshold_stats", self.last_low_pressure_threshold_stats)
+        )
         if "post_run_offline_recompute_summary" in state:
             cached = state.get("post_run_offline_recompute_summary")
             self.post_run_offline_recompute_summary = dict(cached) if isinstance(cached, dict) else None
@@ -1279,6 +1610,12 @@ class ClosedLoopFailureSimulation:
         )
         self.distribution_balance_guard_state = dict(
             state.get("distribution_balance_guard_state", self.distribution_balance_guard_state)
+        )
+        self.low_failure_regime_state = dict(
+            state.get("low_failure_regime_state", self.low_failure_regime_state)
+        )
+        self.pressure_router_state = dict(
+            state.get("pressure_router_state", self.pressure_router_state)
         )
         if "terminal_risk_weights" in state:
             self.evaluator.set_terminal_risk_weights(dict(state["terminal_risk_weights"]))
@@ -1311,12 +1648,16 @@ class ClosedLoopFailureSimulation:
             "last_decision_model_info": self.last_decision_model_info,
             "last_failure_model_info": self.last_failure_model_info,
             "last_threshold_stats": self.last_threshold_stats,
+            "last_low_pressure_model_info": self.last_low_pressure_model_info,
+            "last_low_pressure_threshold_stats": self.last_low_pressure_threshold_stats,
             "post_run_offline_recompute_summary": self.post_run_offline_recompute_summary,
             "accuracy_guard_summary": self.accuracy_guard_summary,
             "rolling_drift_analysis_summary": self.rolling_drift_analysis_summary,
             "initial_baseline_gate_failure_details": self.initial_baseline_gate_failure_details,
             "last_distribution_balance_guard_info": self.last_distribution_balance_guard_info,
             "distribution_balance_guard_state": self.distribution_balance_guard_state,
+            "low_failure_regime_state": self.low_failure_regime_state,
+            "pressure_router_state": self.pressure_router_state,
         }
         ensure_dir(self.session_dir)
         ensure_dir(self.checkpoint_path.parent)
@@ -1410,6 +1751,282 @@ class ClosedLoopFailureSimulation:
         else:
             record["true_failure_v2"] = bool(record.get("true_failure_v2_relaxed", record.get("true_failure_v2", False)))
         return record
+
+    def _is_fused_effective_record(self, record: Dict) -> bool:
+        return bool(record.get("terminal_hard_failure", False)) or self._resolve_true_failure_v2_value(record)
+
+    def _normalize_bandwidth_std_for_pressure(self, value: float) -> float:
+        cfg = dict(getattr(self, "pressure_router_config", DEFAULT_PRESSURE_ROUTER_CONFIG) or {})
+        denom = float(cfg.get("bandwidth_std_norm_max", DEFAULT_PRESSURE_ROUTER_CONFIG["bandwidth_std_norm_max"]) or 0.20)
+        denom = max(1e-6, denom)
+        return float(np.clip(float(value) / denom, 0.0, 1.0))
+
+    def _compute_pressure_score(self, record: Dict) -> float:
+        cfg = dict(getattr(self, "pressure_router_config", DEFAULT_PRESSURE_ROUTER_CONFIG) or {})
+        formula = dict(cfg.get("score_formula", DEFAULT_PRESSURE_ROUTER_CONFIG["score_formula"]) or {})
+        degraded = float(record.get("DegradedEdgeRatio", 0.0) or 0.0)
+        disconnect = float(record.get("EdgeDisconnectRatio", 0.0) or 0.0)
+        bandwidth_mean = float(record.get("EdgeBandwidthMeanDecreaseRatio", 0.0) or 0.0)
+        bandwidth_std_norm = self._normalize_bandwidth_std_for_pressure(
+            float(record.get("EdgeBandwidthDecreaseStd", 0.0) or 0.0)
+        )
+        score = (
+            float(formula.get("degraded_edge_ratio_weight", 0.40)) * degraded
+            + float(formula.get("edge_disconnect_ratio_weight", 0.35)) * disconnect
+            + float(formula.get("edge_bandwidth_mean_decrease_ratio_weight", 0.20)) * bandwidth_mean
+            + float(formula.get("edge_bandwidth_decrease_std_norm_weight", 0.05)) * bandwidth_std_norm
+        )
+        return float(np.clip(score, 0.0, 1.0))
+
+    def _compute_initial_pressure_regime(self, record: Dict) -> str:
+        if not hasattr(self, "pressure_router_config"):
+            return "high_pressure"
+        cfg = dict(getattr(self, "pressure_router_config", DEFAULT_PRESSURE_ROUTER_CONFIG) or {})
+        if normalize_switch_text(cfg.get("enabled"), default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["enabled"])) != "on":
+            return "high_pressure"
+        threshold = float(cfg.get("high_pressure_threshold", DEFAULT_PRESSURE_ROUTER_CONFIG["high_pressure_threshold"]))
+        pressure_score = self._compute_pressure_score(record)
+        return "high_pressure" if pressure_score >= threshold else "low_pressure"
+
+    def _resolve_effective_pressure_regime(self, record: Dict, round_index: Optional[int] = None) -> str:
+        if not hasattr(self, "pressure_router_config"):
+            record["pressure_score"] = float(record.get("pressure_score", 0.0))
+            record["initial_pressure_regime"] = str(record.get("initial_pressure_regime", "high_pressure"))
+            record["effective_pressure_regime"] = str(record.get("effective_pressure_regime", record["initial_pressure_regime"]))
+            record["pressure_override_inbound_signal"] = "keep"
+            record["pressure_override_inbound_applied"] = False
+            return str(record["effective_pressure_regime"])
+        cfg = dict(getattr(self, "pressure_router_config", DEFAULT_PRESSURE_ROUTER_CONFIG) or {})
+        if normalize_switch_text(cfg.get("enabled"), default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["enabled"])) != "on":
+            return "high_pressure"
+        round_value = int(getattr(self, "round_index", 0)) if round_index is None else int(round_index)
+        initial_regime = str(record.get("initial_pressure_regime", self._compute_initial_pressure_regime(record)))
+        router_state = dict(getattr(self, "pressure_router_state", {}) or {})
+        inbound_signal = str(router_state.get("pending_override_signal", "keep"))
+        inbound_apply_round = router_state.get("pending_override_apply_round", None)
+        inbound_applied = False
+        effective_regime = initial_regime
+        if (
+            normalize_switch_text(
+                dict(cfg.get("override", {})).get("enabled"),
+                default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["override"]["enabled"]),
+            )
+            == "on"
+            and str(inbound_signal) == "upgrade_to_high"
+            and inbound_apply_round is not None
+            and int(inbound_apply_round) == int(round_value)
+            and initial_regime == "low_pressure"
+        ):
+            effective_regime = "high_pressure"
+            inbound_applied = True
+        record["pressure_score"] = float(record.get("pressure_score", self._compute_pressure_score(record)))
+        record["initial_pressure_regime"] = initial_regime
+        record["effective_pressure_regime"] = effective_regime
+        record["pressure_override_inbound_signal"] = inbound_signal
+        record["pressure_override_inbound_applied"] = bool(inbound_applied)
+        return effective_regime
+
+    def _set_pending_pressure_override(self, signal: str, apply_round: Optional[int]) -> None:
+        state = dict(getattr(self, "pressure_router_state", {}) or {})
+        state["pending_override_signal"] = str(signal or "keep")
+        state["pending_override_apply_round"] = None if apply_round is None else int(apply_round)
+        self.pressure_router_state = state
+
+    def _compute_round_pressure_override_signal(self, round_records: Sequence[Dict]) -> Dict[str, object]:
+        cfg = dict(getattr(self, "pressure_router_config", DEFAULT_PRESSURE_ROUTER_CONFIG) or {})
+        override_cfg = dict(cfg.get("override", {}) or {})
+        router_enabled = normalize_switch_text(cfg.get("enabled"), default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["enabled"]))
+        override_enabled = normalize_switch_text(
+            override_cfg.get("enabled"),
+            default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["override"]["enabled"]),
+        )
+        if router_enabled != "on" or override_enabled != "on":
+            return {
+                "signal": "keep",
+                "batch_failure_ratio": 0.0,
+                "batch_high_risk_ratio": 0.0,
+                "applied_to_next_round": False,
+            }
+        round_size = int(len(round_records))
+        if round_size <= 0:
+            return {
+                "signal": "keep",
+                "batch_failure_ratio": 0.0,
+                "batch_high_risk_ratio": 0.0,
+                "applied_to_next_round": False,
+            }
+        predicted_failure_count = sum(1 for record in round_records if bool(record.get("system_failure_v2", False)))
+        decision_threshold = float(
+            override_cfg.get(
+                "high_risk_decision_threshold",
+                DEFAULT_PRESSURE_ROUTER_CONFIG["override"]["high_risk_decision_threshold"],
+            )
+        )
+        terminal_threshold = float(
+            override_cfg.get(
+                "high_risk_terminal_threshold",
+                DEFAULT_PRESSURE_ROUTER_CONFIG["override"]["high_risk_terminal_threshold"],
+            )
+        )
+        high_risk_count = 0
+        for record in round_records:
+            decision_score = float(record.get("decision_score_v2", record.get("total_membership_v2", 0.0)))
+            terminal_score = float(
+                record.get("terminal_risk_score", 1.0 if bool(record.get("terminal_hard_failure", False)) else 0.0)
+            )
+            if decision_score >= decision_threshold or terminal_score >= terminal_threshold:
+                high_risk_count += 1
+        batch_failure_ratio = float(predicted_failure_count / max(1, round_size))
+        batch_high_risk_ratio = float(high_risk_count / max(1, round_size))
+        signal = "keep"
+        if batch_failure_ratio >= float(
+            override_cfg.get(
+                "upgrade_if_batch_failure_ratio_ge",
+                DEFAULT_PRESSURE_ROUTER_CONFIG["override"]["upgrade_if_batch_failure_ratio_ge"],
+            )
+        ):
+            signal = "upgrade_to_high"
+        elif batch_high_risk_ratio >= float(
+            override_cfg.get(
+                "upgrade_if_batch_high_risk_ratio_ge",
+                DEFAULT_PRESSURE_ROUTER_CONFIG["override"]["upgrade_if_batch_high_risk_ratio_ge"],
+            )
+        ):
+            signal = "upgrade_to_high"
+        return {
+            "signal": str(signal),
+            "batch_failure_ratio": float(batch_failure_ratio),
+            "batch_high_risk_ratio": float(batch_high_risk_ratio),
+            "applied_to_next_round": bool(signal == "upgrade_to_high"),
+        }
+
+    def _resolve_low_failure_min_effective_support(self) -> int:
+        regime_cfg = dict(getattr(self, "low_failure_regime_config", DEFAULT_LOW_FAILURE_REGIME_CONFIG) or {})
+        cfg = dict(regime_cfg.get("trigger", {}))
+        if normalize_switch_text(
+            regime_cfg.get("allow_small_sample_fused_experiment"),
+            default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["allow_small_sample_fused_experiment"]),
+        ) == "on":
+            return int(
+                max(
+                    2,
+                    int(
+                        regime_cfg.get(
+                            "small_sample_threshold_min_support",
+                            DEFAULT_LOW_FAILURE_REGIME_CONFIG["small_sample_threshold_min_support"],
+                        )
+                    ),
+                )
+            )
+        raw_value = cfg.get("min_effective_support", "")
+        if raw_value in (None, ""):
+            return int(max(2, int(self.args.threshold_min_support)))
+        return int(max(2, int(raw_value)))
+
+    def _should_fallback_from_fused(
+        self,
+        threshold_stats: Optional[Dict[str, object]] = None,
+        failure_model_info: Optional[Dict[str, object]] = None,
+        *,
+        predicted_failure_count: Optional[int] = None,
+        true_failure_count: Optional[int] = None,
+    ) -> Tuple[bool, str]:
+        if str(self.failure_decision_mode).strip().lower() != "single_fused_score":
+            return False, ""
+        regime_cfg = dict(getattr(self, "low_failure_regime_config", DEFAULT_LOW_FAILURE_REGIME_CONFIG) or {})
+        if normalize_switch_text(
+            regime_cfg.get("enabled"),
+            default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["enabled"]),
+        ) != "on":
+            return False, ""
+        if str(
+            regime_cfg.get(
+                "fallback_policy",
+                DEFAULT_LOW_FAILURE_REGIME_CONFIG["fallback_policy"],
+            )
+        ).strip().lower() != "dual_threshold_v2":
+            return False, ""
+
+        threshold_stats = dict(threshold_stats or self.last_threshold_stats or {})
+        failure_model_info = dict(failure_model_info or self.last_failure_model_info or {})
+        trigger_cfg = dict(regime_cfg.get("trigger", {}))
+        min_effective_support = self._resolve_low_failure_min_effective_support()
+        effective_support = int(threshold_stats.get("effective_support", 0))
+        train_support = int(
+            threshold_stats.get(
+                "train_support",
+                threshold_stats.get("threshold_split_train_support", 0),
+            )
+        )
+        positive_count = int(
+            threshold_stats.get(
+                "positive_count",
+                threshold_stats.get("threshold_support_train_positive_count", 0),
+            )
+        )
+        negative_count = int(
+            threshold_stats.get(
+                "negative_count",
+                threshold_stats.get("threshold_support_train_negative_count", 0),
+            )
+        )
+        if effective_support < min_effective_support:
+            return True, "insufficient_effective_support"
+        if train_support < min_effective_support:
+            return True, "insufficient_train_support"
+        if normalize_switch_text(
+            trigger_cfg.get("require_both_classes_in_train"),
+            default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["trigger"]["require_both_classes_in_train"]),
+        ) == "on" and (positive_count == 0 or negative_count == 0):
+            return True, "single_class_labels"
+
+        fused_status = str(failure_model_info.get("fused_model_status", "")).strip().lower()
+        fused_holdout_count = int(failure_model_info.get("fused_model_holdout_record_count", 0))
+        if fused_status != "fitted" or fused_holdout_count <= 0:
+            return True, "fused_model_unavailable"
+
+        min_auc = float(
+            np.clip(
+                float(
+                    trigger_cfg.get(
+                        "min_fused_holdout_auc",
+                        DEFAULT_LOW_FAILURE_REGIME_CONFIG["trigger"]["min_fused_holdout_auc"],
+                    )
+                ),
+                0.0,
+                1.0,
+            )
+        )
+        fused_auc = float(failure_model_info.get("primary_score_holdout_auc", 0.0))
+        if min_auc > 0.0 and fused_auc < min_auc:
+            return True, "low_fused_holdout_auc"
+
+        if (
+            normalize_switch_text(
+                trigger_cfg.get("enable_zero_prediction_guard"),
+                default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["trigger"]["enable_zero_prediction_guard"]),
+            )
+            == "on"
+            and predicted_failure_count is not None
+            and true_failure_count is not None
+            and int(predicted_failure_count) == 0
+            and int(true_failure_count) > 0
+        ):
+            return True, "zero_prediction_guard"
+
+        return False, ""
+
+    def _set_low_failure_regime_state(self, applied: bool, reason: str, effective_mode: str) -> None:
+        regime_cfg = dict(getattr(self, "low_failure_regime_config", DEFAULT_LOW_FAILURE_REGIME_CONFIG) or {})
+        self.low_failure_regime_state = {
+            "enabled": normalize_switch_text(
+                regime_cfg.get("enabled"),
+                default=str(DEFAULT_LOW_FAILURE_REGIME_CONFIG["enabled"]),
+            ),
+            "fallback_applied": bool(applied),
+            "fallback_reason": str(reason or ""),
+            "effective_decision_mode": str(effective_mode),
+        }
 
     @staticmethod
     def _is_no_attack_scenario(scenario: Dict) -> bool:
@@ -1576,6 +2193,78 @@ class ClosedLoopFailureSimulation:
             "p90": float(np.percentile(arr, 90)),
         }
 
+    def _effective_decision_mode_counts(self) -> Dict[str, int]:
+        counts = Counter(
+            str(record.get("effective_decision_mode", self.failure_decision_mode))
+            for record in self.summary_records
+        )
+        return {key: int(value) for key, value in sorted(counts.items())}
+
+    def _write_low_pressure_score_debug_csv(self, tag: str) -> None:
+        if not self.summary_records:
+            return
+        fieldnames = [
+            "sample_id",
+            "y_true",
+            "pressure_group",
+            "low_pressure_score",
+            "low_pressure_threshold",
+            "low_pressure_pred",
+            "final_pred",
+            "decision_source",
+        ]
+        latest_path = self.session_dir / "low_pressure_score_debug.csv"
+        tagged_path = self.session_dir / f"low_pressure_score_debug_{tag}.csv"
+        for output_path in (latest_path, tagged_path):
+            with output_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fieldnames)
+                writer.writeheader()
+                for record in self.summary_records:
+                    pressure_group = str(
+                        record.get(
+                            "effective_pressure_regime",
+                            record.get("initial_pressure_regime", "high_pressure"),
+                        )
+                    )
+                    is_low_pressure = pressure_group == "low_pressure"
+                    low_pressure_score = (
+                        float(record.get("low_pressure_score", 0.0))
+                        if is_low_pressure
+                        else ""
+                    )
+                    low_pressure_threshold = (
+                        float(
+                            record.get(
+                                "low_pressure_threshold",
+                                self.last_low_pressure_model_info.get("low_pressure_threshold", 0.5),
+                            )
+                        )
+                        if is_low_pressure
+                        else ""
+                    )
+                    low_pressure_pred = (
+                        bool(low_pressure_score >= low_pressure_threshold)
+                        if is_low_pressure
+                        else ""
+                    )
+                    writer.writerow(
+                        {
+                            "sample_id": record.get("test_id", ""),
+                            "y_true": bool(record.get("true_failure_v2", False)),
+                            "pressure_group": pressure_group,
+                            "low_pressure_score": low_pressure_score,
+                            "low_pressure_threshold": low_pressure_threshold,
+                            "low_pressure_pred": low_pressure_pred,
+                            "final_pred": bool(record.get("system_failure_v2", False)),
+                            "decision_source": str(
+                                record.get(
+                                    "decision_source",
+                                    record.get("effective_decision_mode", self.failure_decision_mode),
+                                )
+                            ),
+                        }
+                    )
+
     def _write_offline_decision_distribution(self, tag: str):
         if not self.summary_records:
             return
@@ -1627,7 +2316,14 @@ class ClosedLoopFailureSimulation:
 
     def _load_summary_records_from_round_files(self):
         loaded = self._collect_summary_records_from_rounds_dir(self.rounds_dir)
-        self.summary_records = [self._apply_true_failure_policy_to_record(dict(record)) for record in loaded]
+        self.summary_records = []
+        for raw_record in loaded:
+            record = self._apply_true_failure_policy_to_record(dict(raw_record))
+            round_index = int(record.get("round_index", 0) or 0)
+            record["pressure_score"] = self._compute_pressure_score(record)
+            record["initial_pressure_regime"] = self._compute_initial_pressure_regime(record)
+            self._resolve_effective_pressure_regime(record, round_index=round_index)
+            self.summary_records.append(record)
         self.cumulative_failure_labels_v2 = [float(bool(record.get("true_failure_v2", False))) for record in self.summary_records]
 
     def _collect_summary_records_from_rounds_dir(self, rounds_dir: Path) -> List[Dict]:
@@ -1704,7 +2400,7 @@ class ClosedLoopFailureSimulation:
         features: List[List[float]] = []
         labels: List[float] = []
         for record in records:
-            if self.args.threshold_calibration_scope == "terminal_only" and not bool(record.get("terminal_hard_failure", False)):
+            if not self._is_fused_effective_record(record):
                 continue
             filtered_records.append(record)
             features.append(self._build_fused_feature_vector(record))
@@ -1773,6 +2469,72 @@ class ClosedLoopFailureSimulation:
             return np.zeros((0, 8), dtype=np.float32), np.zeros((0,), dtype=np.float32), []
         return np.asarray(features, dtype=np.float32), np.asarray(labels, dtype=np.float32), filtered_records
 
+    def _build_low_pressure_feature_vector(self, record: Dict) -> List[float]:
+        return [
+            float(record.get("converged_mean_v2", 0.0)),
+            float(record.get("converged_p75_v2", 0.0)),
+            float(record.get("converged_max_v2", 0.0)),
+            float(record.get("converged_std_v2", record.get("score_uncertainty_v2", 0.0))),
+            float(record.get("converged_slope_v2", 0.0)),
+            float(record.get("converged_high_ratio_v2", 0.0)),
+            float(record.get("terminal_risk_score", 1.0 if bool(record.get("terminal_hard_failure", False)) else 0.0)),
+            float(record.get("terminal_score_gap_v2", 0.0)),
+            float(record.get("decision_score_v2", record.get("total_membership_v2", 0.0))),
+            float(record.get("pressure_score", self._compute_pressure_score(record))),
+        ]
+
+    def _build_low_pressure_training_matrix(self, records: Sequence[Dict]) -> Tuple[np.ndarray, np.ndarray, List[Dict]]:
+        filtered_records: List[Dict] = []
+        features: List[List[float]] = []
+        labels: List[float] = []
+        for record in records:
+            if str(record.get("effective_pressure_regime", "")) != "low_pressure":
+                continue
+            filtered_records.append(record)
+            features.append(self._build_low_pressure_feature_vector(record))
+            labels.append(float(self._resolve_true_failure_v2_value(record)))
+        if not features:
+            return np.zeros((0, 10), dtype=np.float32), np.zeros((0,), dtype=np.float32), []
+        return np.asarray(features, dtype=np.float32), np.asarray(labels, dtype=np.float32), filtered_records
+
+    def _resolve_low_pressure_min_effective_support(self) -> int:
+        cfg = dict(getattr(self, "low_pressure_classifier_config", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG) or {})
+        fallback_cfg = dict(cfg.get("fallback", {}))
+        return int(max(2, int(fallback_cfg.get("min_effective_support", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["fallback"]["min_effective_support"]))))
+
+    def _should_fallback_from_low_pressure(
+        self,
+        threshold_stats: Optional[Dict[str, object]] = None,
+        model_info: Optional[Dict[str, object]] = None,
+    ) -> Tuple[bool, str]:
+        cfg = dict(getattr(self, "low_pressure_classifier_config", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG) or {})
+        if normalize_switch_text(cfg.get("enabled"), default=str(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["enabled"])) != "on":
+            return True, "low_pressure_classifier_disabled"
+        fallback_cfg = dict(cfg.get("fallback", {}))
+        if str(fallback_cfg.get("policy", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["fallback"]["policy"])).strip().lower() != "dual_threshold_v2":
+            return True, "unsupported_low_pressure_fallback_policy"
+        threshold_stats = dict(threshold_stats or getattr(self, "last_low_pressure_threshold_stats", {}) or {})
+        model_info = dict(model_info or getattr(self, "last_low_pressure_model_info", {}) or {})
+        min_support = self._resolve_low_pressure_min_effective_support()
+        effective_support = int(threshold_stats.get("effective_support", 0))
+        train_support = int(threshold_stats.get("train_support", threshold_stats.get("threshold_split_train_support", 0)))
+        positive_count = int(threshold_stats.get("positive_count", threshold_stats.get("threshold_support_train_positive_count", 0)))
+        negative_count = int(threshold_stats.get("negative_count", threshold_stats.get("threshold_support_train_negative_count", 0)))
+        if effective_support < min_support:
+            return True, "insufficient_effective_support"
+        if train_support < min_support:
+            return True, "insufficient_train_support"
+        if normalize_switch_text(
+            fallback_cfg.get("require_both_classes_in_train"),
+            default=str(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["fallback"]["require_both_classes_in_train"]),
+        ) == "on" and (positive_count == 0 or negative_count == 0):
+            return True, "single_class_labels"
+        model_status = str(model_info.get("low_pressure_model_status", "")).strip().lower()
+        holdout_count = int(model_info.get("low_pressure_model_holdout_record_count", 0))
+        if model_status != "fitted" or holdout_count <= 0:
+            return True, "low_pressure_model_unavailable"
+        return False, ""
+
     @staticmethod
     def _sigmoid_np(values: np.ndarray) -> np.ndarray:
         clipped = np.clip(values, -40.0, 40.0)
@@ -1823,17 +2585,23 @@ class ClosedLoopFailureSimulation:
         *,
         min_train_support: int,
         context: str,
+        holdout_ratio: Optional[float] = None,
     ) -> Dict[str, object]:
         support = len(labels)
-        holdout_ratio = float(self.threshold_split_config.get("holdout_ratio", self.args.threshold_calibration_holdout_ratio))
-        holdout_ratio = float(np.clip(holdout_ratio, 0.0, 0.49))
-        holdout_count = int(np.floor(support * holdout_ratio))
+        if holdout_ratio is None:
+            resolved_holdout_ratio = float(
+                self.threshold_split_config.get("holdout_ratio", self.args.threshold_calibration_holdout_ratio)
+            )
+        else:
+            resolved_holdout_ratio = float(holdout_ratio)
+        resolved_holdout_ratio = float(np.clip(resolved_holdout_ratio, 0.0, 0.49))
+        holdout_count = int(np.floor(support * resolved_holdout_ratio))
         train_count = support - holdout_count
         result: Dict[str, object] = {
             "status": "updated",
             "mode": str(self.threshold_split_config.get("mode", "chronological")).strip().lower(),
             "seed": int(self.threshold_split_seed),
-            "holdout_ratio": float(holdout_ratio),
+            "holdout_ratio": float(resolved_holdout_ratio),
             "late_window_ratio": float(self.threshold_split_config.get("late_window_ratio", 0.25)),
             "holdout_late_fraction": float(self.threshold_split_config.get("holdout_late_fraction", 0.70)),
             "support": int(support),
@@ -1931,6 +2699,8 @@ class ClosedLoopFailureSimulation:
             "threshold_split_train_support": int(split_plan.get("train_support", 0)),
             "threshold_split_holdout_support": int(split_plan.get("holdout_support", 0)),
             "threshold_split_holdout_late_support": int(split_plan.get("holdout_late_support", 0)),
+            "train_positions": [int(pos) for pos in split_plan.get("train_positions", [])],
+            "holdout_positions": [int(pos) for pos in split_plan.get("holdout_positions", [])],
         }
 
     def _resolve_distribution_balance_guard_profile(self) -> Tuple[str, Dict[str, object]]:
@@ -2369,6 +3139,345 @@ class ClosedLoopFailureSimulation:
         )
         return info
 
+    def _fit_low_pressure_classifier(self, records: Sequence[Dict]) -> Dict[str, object]:
+        cfg = dict(getattr(self, "low_pressure_classifier_config", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG) or {})
+        info: Dict[str, object] = {
+            "low_pressure_model_status": "disabled",
+            "low_pressure_model_holdout_record_count": 0,
+            "low_pressure_model_holdout_auc": 0.0,
+            "low_pressure_model_holdout_accuracy": 0.0,
+            "low_pressure_model_type": str(cfg.get("model_type", "mlp")).strip().lower(),
+            "low_pressure_model_input_mean": [],
+            "low_pressure_model_input_std": [],
+            "low_pressure_model_mlp_state": {},
+            "low_pressure_model_hidden_dim": int(cfg.get("hidden_dim", 16)),
+            "low_pressure_threshold": float(self.last_low_pressure_model_info.get("low_pressure_threshold", 0.5)),
+        }
+        if normalize_switch_text(cfg.get("enabled"), default=str(DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["enabled"])) != "on":
+            self.last_low_pressure_model_info = dict(info)
+            return info
+        feature_matrix, labels, _ = self._build_low_pressure_training_matrix(records)
+        support = int(feature_matrix.shape[0])
+        min_support = self._resolve_low_pressure_min_effective_support()
+        if support < min_support or len(np.unique(labels)) < 2:
+            info["low_pressure_model_status"] = "frozen"
+            self.last_low_pressure_model_info = dict(info)
+            return info
+
+        split_plan = self._resolve_split_plan(
+            labels=[bool(value >= 0.5) for value in labels.tolist()],
+            min_train_support=min_support,
+            holdout_ratio=float(cfg.get("holdout_ratio", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["holdout_ratio"])),
+            context="low_pressure_mlp_model",
+        )
+        train_positions = [int(pos) for pos in split_plan.get("train_positions", [])]
+        holdout_positions = [int(pos) for pos in split_plan.get("holdout_positions", [])]
+        holdout_count = len(holdout_positions)
+        if str(split_plan.get("status", "updated")).strip().lower() != "updated" or len(train_positions) < 2:
+            info["low_pressure_model_status"] = "frozen"
+            info["threshold_split"] = self._build_split_metadata(split_plan)
+            if "reason" in split_plan:
+                info["reason"] = str(split_plan["reason"])
+            self.last_low_pressure_model_info = dict(info)
+            return info
+
+        train_np = feature_matrix[train_positions]
+        holdout_np = feature_matrix[holdout_positions]
+        train_mean = np.mean(train_np, axis=0)
+        train_std = np.std(train_np, axis=0)
+        train_std = np.where(train_std < 1e-6, 1.0, train_std)
+        train_norm = (train_np - train_mean) / train_std
+        holdout_norm = (holdout_np - train_mean) / train_std if holdout_count > 0 else holdout_np
+
+        train_x = torch.tensor(train_norm, dtype=torch.float32, device=self.device)
+        train_y = torch.tensor(labels[train_positions], dtype=torch.float32, device=self.device)
+        holdout_x = torch.tensor(holdout_norm, dtype=torch.float32, device=self.device)
+        holdout_y = torch.tensor(labels[holdout_positions], dtype=torch.float32, device=self.device)
+
+        in_dim = int(feature_matrix.shape[1])
+        hidden_dim = max(4, int(cfg.get("hidden_dim", 16)))
+        dropout = float(cfg.get("dropout", 0.10))
+        model = torch.nn.Sequential(
+            torch.nn.Linear(in_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(dropout),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(dropout),
+            torch.nn.Linear(hidden_dim, 1),
+        ).to(self.device)
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=float(cfg.get("learning_rate", 5e-4)),
+            weight_decay=float(cfg.get("weight_decay", 1e-4)),
+        )
+        pos_weight = torch.tensor([float(cfg.get("pos_weight", 20.0))], dtype=torch.float32, device=self.device)
+        bce_loss = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        patience = max(1, int(cfg.get("patience", 20)))
+        epochs = max(1, int(cfg.get("epochs", 200)))
+        batch_size = max(1, int(cfg.get("batch_size", 16)))
+        best_loss = float("inf")
+        stale_epochs = 0
+        best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+
+        for _ in range(epochs):
+            optimizer.zero_grad()
+            permutation = torch.randperm(train_x.shape[0], device=self.device)
+            epoch_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
+            batch_count = 0
+            for start in range(0, train_x.shape[0], batch_size):
+                batch_idx = permutation[start:start + batch_size]
+                logits = model(train_x[batch_idx]).squeeze(1)
+                loss = bce_loss(logits, train_y[batch_idx])
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                epoch_loss = epoch_loss + loss.detach()
+                batch_count += 1
+            loss_value = float((epoch_loss / max(1, batch_count)).cpu().item())
+            if loss_value + 1e-9 < best_loss:
+                best_loss = loss_value
+                stale_epochs = 0
+                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            else:
+                stale_epochs += 1
+                if stale_epochs >= patience:
+                    break
+
+        model.load_state_dict(best_state)
+        model.eval()
+        if holdout_count > 0:
+            with torch.no_grad():
+                holdout_logits = model(holdout_x).squeeze(1)
+                holdout_scores = torch.sigmoid(holdout_logits).detach().cpu().numpy()
+            holdout_labels = holdout_y.detach().cpu().numpy() >= 0.5
+            holdout_pred = holdout_scores >= 0.5
+            holdout_accuracy = float(np.mean(holdout_pred == holdout_labels))
+            holdout_auc = self._roc_auc_binary(holdout_scores.tolist(), holdout_labels.tolist())
+        else:
+            holdout_accuracy = 0.0
+            holdout_auc = 0.0
+        state_export = {key: value.detach().cpu().numpy().tolist() for key, value in best_state.items()}
+        info.update(
+            {
+                "low_pressure_model_status": "fitted",
+                "low_pressure_model_holdout_record_count": int(holdout_count),
+                "low_pressure_model_holdout_auc": float(holdout_auc),
+                "low_pressure_model_holdout_accuracy": float(holdout_accuracy),
+                "low_pressure_model_input_mean": train_mean.astype(np.float32).tolist(),
+                "low_pressure_model_input_std": train_std.astype(np.float32).tolist(),
+                "low_pressure_model_mlp_state": state_export,
+                "low_pressure_model_hidden_dim": int(hidden_dim),
+                "threshold_split": self._build_split_metadata(split_plan),
+            }
+        )
+        self.last_low_pressure_model_info = dict(info)
+        return info
+
+    def _compute_low_pressure_score_and_logit_for_record(self, record: Dict) -> Tuple[float, Optional[float]]:
+        input_mean = np.asarray(self.last_low_pressure_model_info.get("low_pressure_model_input_mean", []), dtype=np.float32)
+        input_std = np.asarray(self.last_low_pressure_model_info.get("low_pressure_model_input_std", []), dtype=np.float32)
+        mlp_state = dict(self.last_low_pressure_model_info.get("low_pressure_model_mlp_state", {}))
+        features = np.asarray(self._build_low_pressure_feature_vector(record), dtype=np.float32)
+        if (
+            input_mean.size == features.size
+            and input_std.size == features.size
+            and all(key in mlp_state for key in ("0.weight", "0.bias", "3.weight", "3.bias", "6.weight", "6.bias"))
+        ):
+            normalized = (features - input_mean) / np.where(np.abs(input_std) < 1e-6, 1.0, input_std)
+            tensor = torch.tensor(normalized[None, :], dtype=torch.float32, device=self.device)
+            hidden_dim = max(4, int(self.last_low_pressure_model_info.get("low_pressure_model_hidden_dim", 16)))
+            dropout = float(dict(getattr(self, "low_pressure_classifier_config", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG) or {}).get("dropout", 0.10))
+            model = torch.nn.Sequential(
+                torch.nn.Linear(features.size, hidden_dim),
+                torch.nn.ReLU(),
+                torch.nn.Dropout(dropout),
+                torch.nn.Linear(hidden_dim, hidden_dim),
+                torch.nn.ReLU(),
+                torch.nn.Dropout(dropout),
+                torch.nn.Linear(hidden_dim, 1),
+            ).to(self.device)
+            state_dict = {key: torch.tensor(value, dtype=torch.float32, device=self.device) for key, value in mlp_state.items()}
+            model.load_state_dict(state_dict)
+            model.eval()
+            with torch.no_grad():
+                logit = float(model(tensor).squeeze().cpu().item())
+            return float(1.0 / (1.0 + math.exp(-logit))), float(logit)
+        return 0.0, None
+
+    def _calibrate_low_pressure_threshold(self, records: Sequence[Dict]) -> Dict[str, object]:
+        cfg = dict(getattr(self, "low_pressure_classifier_config", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG) or {})
+        threshold_cfg = dict(cfg.get("threshold", {}))
+        result: Dict[str, object] = {
+            "status": "frozen",
+            "reason": "insufficient_samples",
+            "threshold": float(self.last_low_pressure_model_info.get("low_pressure_threshold", 0.5)),
+            "low_pressure_threshold": float(self.last_low_pressure_model_info.get("low_pressure_threshold", 0.5)),
+            "objective": str(threshold_cfg.get("objective", "recall_at_precision")),
+            "precision": 0.0,
+            "recall": 0.0,
+            "accuracy": 0.0,
+            "balanced_accuracy": 0.0,
+            "f1": 0.0,
+            "train_metrics_at_selected_threshold": {
+                "f1": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "accuracy": 0.0,
+                "balanced_accuracy": 0.0,
+            },
+            "holdout_metrics": {"f1": 0.0, "precision": 0.0, "recall": 0.0, "accuracy": 0.0, "balanced_accuracy": 0.0},
+            "low_pressure_model_holdout_auc": float(self.last_low_pressure_model_info.get("low_pressure_model_holdout_auc", 0.0)),
+            "threshold_min_precision_used": float(threshold_cfg.get("min_precision", 0.50)),
+            "threshold_constraint_status": "not_evaluated",
+            "selected_from": "holdout",
+            "low_pressure_threshold_status": "frozen",
+            "low_pressure_threshold_reason": "insufficient_samples",
+            "low_pressure_threshold_train_support": 0,
+            "low_pressure_threshold_holdout_support": 0,
+            "low_pressure_threshold_positive_count": 0,
+            "low_pressure_threshold_negative_count": 0,
+            "low_pressure_threshold_constraint_status": "not_evaluated",
+            "low_pressure_threshold_selected_from": "holdout",
+            "low_pressure_threshold_holdout_metrics": {
+                "f1": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "accuracy": 0.0,
+                "balanced_accuracy": 0.0,
+            },
+            "low_pressure_threshold_train_metrics_at_selected_threshold": {
+                "f1": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "accuracy": 0.0,
+                "balanced_accuracy": 0.0,
+            },
+        }
+        filtered_records = [record for record in records if str(record.get("effective_pressure_regime", "")) == "low_pressure"]
+        effective_support = len(filtered_records)
+        result["effective_support"] = int(effective_support)
+        if effective_support < self._resolve_low_pressure_min_effective_support():
+            self.last_low_pressure_threshold_stats = dict(result)
+            return result
+        split_plan = dict(self.last_low_pressure_model_info.get("threshold_split", {}))
+        train_positions = [int(pos) for pos in split_plan.get("train_positions", [])]
+        holdout_positions = [int(pos) for pos in split_plan.get("holdout_positions", [])]
+        if not train_positions and not holdout_positions:
+            fallback_split_plan = self._resolve_split_plan(
+                labels=[self._resolve_true_failure_v2_value(record) for record in filtered_records],
+                min_train_support=self._resolve_low_pressure_min_effective_support(),
+                holdout_ratio=float(
+                    threshold_cfg.get(
+                        "holdout_ratio",
+                        cfg.get("holdout_ratio", DEFAULT_LOW_PRESSURE_CLASSIFIER_CONFIG["holdout_ratio"]),
+                    )
+                ),
+                context="low_pressure_mlp_model",
+            )
+            split_plan = self._build_split_metadata(fallback_split_plan)
+            self.last_low_pressure_model_info["threshold_split"] = dict(split_plan)
+            train_positions = [int(pos) for pos in split_plan.get("train_positions", [])]
+            holdout_positions = [int(pos) for pos in split_plan.get("holdout_positions", [])]
+        train_records = [filtered_records[pos] for pos in train_positions if 0 <= pos < len(filtered_records)]
+        holdout_records = [filtered_records[pos] for pos in holdout_positions if 0 <= pos < len(filtered_records)]
+        train_scores = [self._compute_low_pressure_score_and_logit_for_record(record)[0] for record in train_records]
+        train_labels = [self._resolve_true_failure_v2_value(record) for record in train_records]
+        holdout_scores = [self._compute_low_pressure_score_and_logit_for_record(record)[0] for record in holdout_records]
+        holdout_labels = [self._resolve_true_failure_v2_value(record) for record in holdout_records]
+        result["train_support"] = int(len(train_records))
+        result["holdout_support"] = int(len(holdout_records))
+        result["positive_count"] = int(sum(1 for label in train_labels if label))
+        result["negative_count"] = int(sum(1 for label in train_labels if not label))
+        result["low_pressure_threshold_train_support"] = int(len(train_records))
+        result["low_pressure_threshold_holdout_support"] = int(len(holdout_records))
+        result["low_pressure_threshold_positive_count"] = int(sum(1 for label in holdout_labels if label))
+        result["low_pressure_threshold_negative_count"] = int(sum(1 for label in holdout_labels if not label))
+        if len(train_scores) < 2 or len(set(train_labels)) < 2:
+            result["reason"] = "single_class_labels"
+            result["low_pressure_threshold_reason"] = "single_class_labels"
+            self.last_low_pressure_threshold_stats = dict(result)
+            return result
+        if len(holdout_scores) < 2:
+            result["reason"] = "insufficient_holdout_support"
+            result["low_pressure_threshold_reason"] = "insufficient_holdout_support"
+            self.last_low_pressure_threshold_stats = dict(result)
+            return result
+        if len(set(holdout_labels)) < 2:
+            result["reason"] = "holdout_single_class_labels"
+            result["low_pressure_threshold_reason"] = "holdout_single_class_labels"
+            self.last_low_pressure_threshold_stats = dict(result)
+            return result
+        candidates = sorted(set(float(np.clip(score, 0.0, 1.0)) for score in holdout_scores) | {0.0, 1.0})
+        holdout_labels_np = np.asarray(holdout_labels, dtype=bool)
+        train_labels_np = np.asarray(train_labels, dtype=bool)
+        min_precision = float(threshold_cfg.get("min_precision", 0.50))
+        eligible: List[Dict[str, object]] = []
+        fallback: List[Dict[str, object]] = []
+        for threshold in candidates:
+            pred = np.asarray(holdout_scores, dtype=float) >= float(threshold)
+            metrics = self.evaluator._prediction_metrics(pred, holdout_labels_np)
+            payload = {"threshold": float(threshold), "metrics": metrics}
+            fallback.append(payload)
+            if float(metrics["precision"]) + 1e-12 >= min_precision:
+                eligible.append(payload)
+        pool = eligible if eligible else fallback
+        constraint_status = "satisfied" if eligible else "all_candidates_below_min_precision"
+        best = None
+        for candidate in pool:
+            metrics = dict(candidate["metrics"])
+            if best is None:
+                best = {"threshold": candidate["threshold"], "metrics": metrics}
+                continue
+            best_metrics = dict(best["metrics"])
+            if metrics["recall"] > best_metrics["recall"] + 1e-12:
+                best = {"threshold": candidate["threshold"], "metrics": metrics}
+            elif abs(metrics["recall"] - best_metrics["recall"]) <= 1e-12:
+                if metrics["balanced_accuracy"] > best_metrics["balanced_accuracy"] + 1e-12:
+                    best = {"threshold": candidate["threshold"], "metrics": metrics}
+                elif abs(metrics["balanced_accuracy"] - best_metrics["balanced_accuracy"]) <= 1e-12:
+                    if float(candidate["threshold"]) < float(best["threshold"]) - 1e-12:
+                        best = {"threshold": candidate["threshold"], "metrics": metrics}
+        best = best or {
+            "threshold": 0.5,
+            "metrics": self.evaluator._prediction_metrics(np.asarray(holdout_scores, dtype=float) >= 0.5, holdout_labels_np),
+        }
+        train_metrics = self.evaluator._prediction_metrics(
+            np.asarray(train_scores, dtype=float) >= float(best["threshold"]),
+            train_labels_np,
+        )
+        holdout_metrics = {"f1": 0.0, "precision": 0.0, "recall": 0.0, "accuracy": 0.0, "balanced_accuracy": 0.0}
+        if holdout_scores and holdout_labels:
+            holdout_pred = np.asarray(holdout_scores, dtype=float) >= float(best["threshold"])
+            holdout_metrics = self.evaluator._prediction_metrics(holdout_pred, holdout_labels_np)
+        result.update(
+            {
+                "status": "updated",
+                "reason": "",
+                "threshold": float(best["threshold"]),
+                "low_pressure_threshold": float(best["threshold"]),
+                "precision": float(best["metrics"]["precision"]),
+                "recall": float(best["metrics"]["recall"]),
+                "accuracy": float(best["metrics"]["accuracy"]),
+                "balanced_accuracy": float(best["metrics"]["balanced_accuracy"]),
+                "f1": float(best["metrics"]["f1"]),
+                "train_metrics_at_selected_threshold": train_metrics,
+                "holdout_metrics": holdout_metrics,
+                "threshold_constraint_status": str(constraint_status),
+                "selected_from": "holdout",
+                "low_pressure_threshold_status": "updated",
+                "low_pressure_threshold_reason": "",
+                "low_pressure_threshold_constraint_status": str(constraint_status),
+                "low_pressure_threshold_selected_from": "holdout",
+                "low_pressure_threshold_holdout_metrics": holdout_metrics,
+                "low_pressure_threshold_train_metrics_at_selected_threshold": train_metrics,
+                "threshold_constraint_status": str(constraint_status),
+            }
+        )
+        self.last_low_pressure_model_info["low_pressure_threshold"] = float(best["threshold"])
+        self.last_low_pressure_threshold_stats = dict(result)
+        return result
+
     def _fit_learned_decision_weights(self) -> Dict[str, object]:
         info: Dict[str, object] = {
             "decision_model_status": "disabled",
@@ -2524,8 +3633,17 @@ class ClosedLoopFailureSimulation:
         mode = self.failure_decision_mode
         base_decision_info = self._fit_learned_decision_weights()
         self._refresh_decision_scores_on_records()
+        for record in self.summary_records:
+            record["pressure_score"] = self._compute_pressure_score(record)
+            record["initial_pressure_regime"] = self._compute_initial_pressure_regime(record)
+            self._resolve_effective_pressure_regime(record, round_index=int(record.get("round_index", self.round_index) or 0))
+        high_pressure_records = [
+            record for record in self.summary_records if str(record.get("effective_pressure_regime", "high_pressure")) == "high_pressure"
+        ]
+        self._fit_low_pressure_classifier(self.summary_records)
+        self._calibrate_low_pressure_threshold(self.summary_records)
         if mode == "single_fused_score":
-            feature_matrix, labels, _ = self._build_fused_training_matrix(self.summary_records)
+            feature_matrix, labels, _ = self._build_fused_training_matrix(high_pressure_records)
             fused_model_type = str(self.args.fused_model_type).strip().lower()
             fused_info = self._fit_mlp_failure_model(
                 feature_matrix=feature_matrix,
@@ -2883,7 +4001,25 @@ class ClosedLoopFailureSimulation:
     def _recompute_predictions_from_thresholds(self):
         self._refresh_decision_scores_on_records()
         mode = self.failure_decision_mode
+        low_pressure_model_info = dict(getattr(self, "last_low_pressure_model_info", {}) or {})
+        low_pressure_threshold_stats = dict(getattr(self, "last_low_pressure_threshold_stats", {}) or {})
+        fallback_applied = False
+        fallback_reason = ""
+        effective_mode = mode
+        low_pressure_fallback_applied = False
+        low_pressure_fallback_reason = ""
+        if mode == "single_fused_score":
+            fallback_applied, fallback_reason = self._should_fallback_from_fused(
+                self.last_threshold_stats,
+                self.last_failure_model_info,
+            )
+            if fallback_applied:
+                effective_mode = "dual_threshold_v2"
         for record in self.summary_records:
+            round_index = int(record.get("round_index", getattr(self, "round_index", 0)) or 0)
+            record["pressure_score"] = self._compute_pressure_score(record)
+            record["initial_pressure_regime"] = self._compute_initial_pressure_regime(record)
+            pressure_regime = self._resolve_effective_pressure_regime(record, round_index=round_index)
             decision_score = float(record.get("decision_score_v2", record.get("total_membership_v2", 0.0)))
             terminal_score = float(
                 record.get("terminal_risk_score", 1.0 if bool(record.get("terminal_hard_failure", False)) else 0.0)
@@ -2891,9 +4027,41 @@ class ClosedLoopFailureSimulation:
             fused_score = 0.0
             fused_logit: Optional[float] = None
             final_failure_probability = 0.0
-            if mode == "single_fused_score":
+            low_pressure_score = 0.0
+            low_pressure_logit: Optional[float] = None
+            low_pressure_threshold = float(low_pressure_model_info.get("low_pressure_threshold", 0.5))
+            record_effective_mode = effective_mode
+            record_low_failure_fallback_applied = bool(fallback_applied)
+            record_low_failure_fallback_reason = str(fallback_reason)
+            record_low_pressure_fallback_applied = False
+            record_low_pressure_fallback_reason = ""
+            record_low_pressure_pred: Optional[bool] = None
+            if pressure_regime == "low_pressure":
+                low_pressure_score, low_pressure_logit = self._compute_low_pressure_score_and_logit_for_record(record)
+                record_low_pressure_pred = bool(low_pressure_score >= low_pressure_threshold)
+                low_pressure_fallback_applied, low_pressure_fallback_reason = self._should_fallback_from_low_pressure(
+                    low_pressure_threshold_stats,
+                    low_pressure_model_info,
+                )
+                if not low_pressure_fallback_applied:
+                    pred_v2 = bool(record_low_pressure_pred)
+                    record_effective_mode = "low_pressure_classifier"
+                else:
+                    pred_v2 = bool(
+                        decision_score >= float(self.evaluator.v2_failure_threshold)
+                        and terminal_score >= float(self.evaluator.terminal_threshold_v2)
+                    )
+                    record_effective_mode = "low_pressure_dual_threshold_fallback"
+                    record_low_pressure_fallback_applied = True
+                    record_low_pressure_fallback_reason = str(low_pressure_fallback_reason)
+            elif mode == "single_fused_score":
                 fused_score, fused_logit = self._compute_fused_score_and_logit_for_record(record)
                 pred_v2 = bool(fused_score >= float(self.last_failure_model_info.get("fused_threshold", 0.5)))
+                if fallback_applied:
+                    pred_v2 = bool(
+                        decision_score >= float(self.evaluator.v2_failure_threshold)
+                        and terminal_score >= float(self.evaluator.terminal_threshold_v2)
+                    )
             elif mode == "direct_failure_model":
                 final_failure_probability = self._compute_direct_failure_probability_for_record(record)
                 pred_v2 = bool(final_failure_probability >= float(self.last_failure_model_info.get("final_threshold", 0.5)))
@@ -2902,6 +4070,16 @@ class ClosedLoopFailureSimulation:
             record["system_failure_v2"] = pred_v2
             record["failure_decision_mode"] = mode
             record["decision_policy"] = mode
+            record["effective_decision_mode"] = record_effective_mode
+            record["decision_source"] = record_effective_mode
+            record["low_failure_fallback_applied"] = bool(record_low_failure_fallback_applied)
+            record["low_failure_fallback_reason"] = str(record_low_failure_fallback_reason)
+            record["low_pressure_score"] = float(low_pressure_score)
+            record["low_pressure_logit"] = low_pressure_logit
+            record["low_pressure_threshold"] = float(low_pressure_threshold)
+            record["low_pressure_pred"] = record_low_pressure_pred
+            record["low_pressure_fallback_applied"] = bool(record_low_pressure_fallback_applied)
+            record["low_pressure_fallback_reason"] = str(record_low_pressure_fallback_reason)
             record["fused_score"] = float(fused_score)
             record["fused_logit"] = fused_logit
             record["final_failure_probability"] = float(final_failure_probability)
@@ -2914,6 +4092,37 @@ class ClosedLoopFailureSimulation:
             self._apply_true_failure_policy_to_record(record)
             record["system_failure"] = pred_v2
             record["true_failure"] = bool(record.get("true_failure_v2", False))
+
+        if mode == "single_fused_score" and not fallback_applied:
+            predicted_failure_count = sum(1 for record in self.summary_records if bool(record.get("system_failure_v2", False)))
+            true_failure_count = sum(1 for record in self.summary_records if self._resolve_true_failure_v2_value(record))
+            zero_guard_applied, zero_guard_reason = self._should_fallback_from_fused(
+                self.last_threshold_stats,
+                self.last_failure_model_info,
+                predicted_failure_count=predicted_failure_count,
+                true_failure_count=true_failure_count,
+            )
+            if zero_guard_applied and zero_guard_reason == "zero_prediction_guard":
+                fallback_applied = True
+                fallback_reason = zero_guard_reason
+                effective_mode = "dual_threshold_v2"
+                for record in self.summary_records:
+                    decision_score = float(record.get("decision_score_v2", record.get("total_membership_v2", 0.0)))
+                    terminal_score = float(
+                        record.get("terminal_risk_score", 1.0 if bool(record.get("terminal_hard_failure", False)) else 0.0)
+                    )
+                    pred_v2 = bool(
+                        decision_score >= float(self.evaluator.v2_failure_threshold)
+                        and terminal_score >= float(self.evaluator.terminal_threshold_v2)
+                    )
+                    record["system_failure_v2"] = pred_v2
+                    record["system_failure"] = pred_v2
+                    record["effective_decision_mode"] = effective_mode
+                    record["decision_source"] = effective_mode
+                    record["low_failure_fallback_applied"] = True
+                    record["low_failure_fallback_reason"] = zero_guard_reason
+
+        self._set_low_failure_regime_state(fallback_applied, fallback_reason, effective_mode)
 
     def _annotate_step_records_with_final_sample_scores(self) -> None:
         if not self.step_records or not self.summary_records:
@@ -2974,6 +4183,7 @@ class ClosedLoopFailureSimulation:
         decision_model_stats = self._fit_failure_decision_models()
         self._recompute_predictions_from_thresholds()
         self._write_offline_decision_distribution(tag="before_offline_recompute")
+        self._write_low_pressure_score_debug_csv(tag="before_offline_recompute")
 
         threshold_stats: Dict[str, object] = {
             "status": "frozen",
@@ -2987,6 +4197,7 @@ class ClosedLoopFailureSimulation:
 
         self._recompute_predictions_from_thresholds()
         self._write_offline_decision_distribution(tag="after_offline_recompute")
+        self._write_low_pressure_score_debug_csv(tag="after_offline_recompute")
         self.threshold_update_status = str(threshold_stats.get("status", self.threshold_update_status))
         self.last_threshold_stats = dict(threshold_stats)
         self.stop_reason = "offline_recompute_only"
@@ -3006,6 +4217,8 @@ class ClosedLoopFailureSimulation:
             "threshold_stats": threshold_stats,
             "decision_formula_config": self.evaluator.get_decision_formula_config(),
             "decision_model_info": decision_model_stats,
+            "low_pressure_model_info": copy.deepcopy(self.last_low_pressure_model_info),
+            "low_pressure_threshold_stats": copy.deepcopy(self.last_low_pressure_threshold_stats),
             "record_count": len(self.summary_records),
         }
         offline_path.write_text(json.dumps(offline_payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -3133,6 +4346,9 @@ class ClosedLoopFailureSimulation:
                     "terminal_threshold_v2": float(evaluation.get("terminal_threshold_v2", self.evaluator.terminal_threshold_v2)),
                     "performance_file": str(performance_file_path),
                 }
+                summary_record["pressure_score"] = self._compute_pressure_score(summary_record)
+                summary_record["initial_pressure_regime"] = self._compute_initial_pressure_regime(summary_record)
+                self._resolve_effective_pressure_regime(summary_record, round_index=round_index)
                 round_summary_records.append(summary_record)
 
                 for sample, step_eval in zip(evaluation["samples"], evaluation["step_scores"]):
@@ -3181,8 +4397,19 @@ class ClosedLoopFailureSimulation:
         # Keep online behavior consistent with offline: fit active decision model before threshold calibration.
         self._fit_failure_decision_models()
         threshold_stats = self._calibrate_failure_threshold_v2()
-        if bool(self.args.online_backfill_after_each_round):
-            self._recompute_predictions_from_thresholds()
+        self._recompute_predictions_from_thresholds()
+        override_info = self._compute_round_pressure_override_signal(round_summary_records)
+        self.pressure_router_state["last_round_batch_failure_ratio"] = float(override_info.get("batch_failure_ratio", 0.0))
+        self.pressure_router_state["last_round_batch_high_risk_ratio"] = float(override_info.get("batch_high_risk_ratio", 0.0))
+        self.pressure_router_state["last_round_override_signal"] = str(override_info.get("signal", "keep"))
+        self.pressure_router_state["last_round_override_applied_to_next_round"] = bool(
+            override_info.get("applied_to_next_round", False)
+        )
+        next_round_apply = int(round_index) + 1
+        self._set_pending_pressure_override(str(override_info.get("signal", "keep")), next_round_apply)
+        for record in round_summary_records:
+            record["pressure_override_outbound_signal"] = str(override_info.get("signal", "keep"))
+            record["pressure_override_applied_to_next_round"] = bool(override_info.get("applied_to_next_round", False))
 
         continuous_tensor = torch.tensor(np.array(self.cumulative_continuous_features), dtype=torch.float32)
         discrete_tensor = torch.tensor(np.array(self.cumulative_discrete_features), dtype=torch.long)
@@ -4049,8 +5276,26 @@ class ClosedLoopFailureSimulation:
 
         raw_true_labels = [self._resolve_true_failure_v2_value(record) for record in self.summary_records]
         raw_terminal_flags = [bool(record.get("terminal_hard_failure", False)) for record in self.summary_records]
-
-        effective_indices = [idx for idx, flag in enumerate(raw_terminal_flags) if flag]
+        pressure_enabled = normalize_switch_text(
+            getattr(self, "pressure_router_config", {}).get("enabled"),
+            default=str(DEFAULT_PRESSURE_ROUTER_CONFIG["enabled"]),
+        ) == "on"
+        mode = self.failure_decision_mode
+        if mode == "single_fused_score":
+            # Keep the external scope label for compatibility, but internally widen the
+            # fused effective sample set to terminal hard-fail or true-label-positive.
+            effective_indices = [
+                idx
+                for idx, record in enumerate(self.summary_records)
+                if (not pressure_enabled or str(record.get("effective_pressure_regime", "high_pressure")) == "high_pressure")
+                and self._is_fused_effective_record(record)
+            ]
+        else:
+            effective_indices = [
+                idx
+                for idx, flag in enumerate(raw_terminal_flags)
+                if flag and (not pressure_enabled or str(self.summary_records[idx].get("effective_pressure_regime", "high_pressure")) == "high_pressure")
+            ]
 
         if len(effective_indices) < max(2, int(self.args.threshold_min_support)):
             self.threshold_update_status = "frozen"
@@ -4139,7 +5384,6 @@ class ClosedLoopFailureSimulation:
             self.last_threshold_stats = dict(result)
             return result
 
-        mode = self.failure_decision_mode
         if mode == "single_fused_score":
             previous_threshold = float(self.last_failure_model_info.get("fused_threshold", 0.5))
             fused_scores = [self._compute_fused_score_and_logit_for_record(record)[0] for record in self.summary_records]
@@ -4329,7 +5573,11 @@ class ClosedLoopFailureSimulation:
         labels: List[bool] = []
         for record in records:
             labels.append(bool(self._resolve_true_failure_v2_value(record)))
-            if mode == "single_fused_score":
+            pressure_regime = str(record.get("effective_pressure_regime", record.get("initial_pressure_regime", "high_pressure")))
+            if pressure_regime == "low_pressure":
+                score, _ = self._compute_low_pressure_score_and_logit_for_record(record)
+                threshold = float(self.last_low_pressure_model_info.get("low_pressure_threshold", 0.5))
+            elif mode == "single_fused_score":
                 score, _ = self._compute_fused_score_and_logit_for_record(record)
                 threshold = float(self.last_failure_model_info.get("fused_threshold", 0.5))
             else:
@@ -4525,6 +5773,31 @@ class ClosedLoopFailureSimulation:
             if not bool(record.get("system_failure_v2", False)) and self._resolve_true_failure_v2_value(record)
         )
         guard_info = dict(self.last_distribution_balance_guard_info or {})
+        low_failure_info = dict(getattr(self, "low_failure_regime_state", {}) or {})
+        pressure_info = dict(getattr(self, "pressure_router_state", {}) or {})
+        low_pressure_threshold_stats = dict(getattr(self, "last_low_pressure_threshold_stats", {}) or {})
+        pressure_scores = [float(record.get("pressure_score", 0.0)) for record in self.summary_records]
+        high_pressure_scores = [
+            float(record.get("pressure_score", 0.0))
+            for record in self.summary_records
+            if str(record.get("effective_pressure_regime", record.get("initial_pressure_regime", "high_pressure"))) == "high_pressure"
+        ]
+        low_pressure_scores = [
+            float(record.get("pressure_score", 0.0))
+            for record in self.summary_records
+            if str(record.get("effective_pressure_regime", record.get("initial_pressure_regime", "high_pressure"))) == "low_pressure"
+        ]
+        high_pressure_count = sum(
+            1
+            for record in self.summary_records
+            if str(record.get("effective_pressure_regime", record.get("initial_pressure_regime", "high_pressure"))) == "high_pressure"
+        )
+        low_pressure_count = sum(
+            1
+            for record in self.summary_records
+            if str(record.get("effective_pressure_regime", record.get("initial_pressure_regime", "high_pressure"))) == "low_pressure"
+        )
+        effective_decision_mode_counts = self._effective_decision_mode_counts()
         return {
             "record_count": int(len(self.summary_records)),
             "predicted_failure_count": int(predicted_failures_v2),
@@ -4534,6 +5807,113 @@ class ClosedLoopFailureSimulation:
             "confusion_matrix": {"tp": int(tp), "fp": int(fp), "tn": int(tn), "fn": int(fn)},
             "true_failure_policy": str(self.true_failure_v2_policy),
             "failure_decision_mode": str(self.failure_decision_mode),
+            "effective_decision_mode": str(
+                low_failure_info.get("effective_decision_mode", self.failure_decision_mode)
+            ),
+            "effective_decision_mode_scope": "global_summary_state",
+            "effective_decision_mode_counts": effective_decision_mode_counts,
+            "low_failure_regime_enabled": str(
+                low_failure_info.get(
+                    "enabled",
+                    normalize_switch_text(self.low_failure_regime_config.get("enabled"), default="off"),
+                )
+            ),
+            "low_failure_fallback_applied": bool(low_failure_info.get("fallback_applied", False)),
+            "low_failure_fallback_reason": str(low_failure_info.get("fallback_reason", "")),
+            "pressure_router_enabled": str(pressure_info.get("router_enabled", "off")),
+            "pressure_override_enabled": str(pressure_info.get("override_enabled", "off")),
+            "pressure_override_signal": str(pressure_info.get("pending_override_signal", "keep")),
+            "pressure_override_apply_round": pressure_info.get("pending_override_apply_round", None),
+            "last_round_batch_failure_ratio": float(pressure_info.get("last_round_batch_failure_ratio", 0.0)),
+            "last_round_batch_high_risk_ratio": float(pressure_info.get("last_round_batch_high_risk_ratio", 0.0)),
+            "last_round_override_signal": str(pressure_info.get("last_round_override_signal", "keep")),
+            "last_round_override_applied_to_next_round": bool(
+                pressure_info.get("last_round_override_applied_to_next_round", False)
+            ),
+            "high_pressure_record_count": int(high_pressure_count),
+            "low_pressure_record_count": int(low_pressure_count),
+            "low_pressure_classifier_record_count": int(effective_decision_mode_counts.get("low_pressure_classifier", 0)),
+            "low_pressure_dual_threshold_fallback_record_count": int(
+                effective_decision_mode_counts.get("low_pressure_dual_threshold_fallback", 0)
+            ),
+            "high_pressure_fused_record_count": int(effective_decision_mode_counts.get("single_fused_score", 0)),
+            "high_pressure_dual_threshold_fallback_record_count": int(
+                effective_decision_mode_counts.get("dual_threshold_v2", 0)
+            ),
+            "pressure_score_percentiles_all": self._percentiles(pressure_scores),
+            "pressure_score_percentiles_high_pressure": self._percentiles(high_pressure_scores),
+            "pressure_score_percentiles_low_pressure": self._percentiles(low_pressure_scores),
+            "low_pressure_classifier_status": str(
+                self.last_low_pressure_model_info.get("low_pressure_model_status", "disabled")
+            ),
+            "low_pressure_classifier_holdout_auc": float(
+                self.last_low_pressure_model_info.get("low_pressure_model_holdout_auc", 0.0)
+            ),
+            "low_pressure_threshold": float(self.last_low_pressure_model_info.get("low_pressure_threshold", 0.5)),
+            "low_pressure_threshold_status": str(
+                low_pressure_threshold_stats.get(
+                    "low_pressure_threshold_status",
+                    low_pressure_threshold_stats.get("status", "unknown"),
+                )
+            ),
+            "low_pressure_threshold_reason": str(
+                low_pressure_threshold_stats.get(
+                    "low_pressure_threshold_reason",
+                    low_pressure_threshold_stats.get("reason", ""),
+                )
+            ),
+            "low_pressure_threshold_train_support": int(
+                low_pressure_threshold_stats.get(
+                    "low_pressure_threshold_train_support",
+                    low_pressure_threshold_stats.get("train_support", 0),
+                )
+            ),
+            "low_pressure_threshold_holdout_support": int(
+                low_pressure_threshold_stats.get(
+                    "low_pressure_threshold_holdout_support",
+                    low_pressure_threshold_stats.get("holdout_support", 0),
+                )
+            ),
+            "low_pressure_threshold_positive_count": int(
+                low_pressure_threshold_stats.get("low_pressure_threshold_positive_count", 0)
+            ),
+            "low_pressure_threshold_negative_count": int(
+                low_pressure_threshold_stats.get("low_pressure_threshold_negative_count", 0)
+            ),
+            "low_pressure_threshold_constraint_status": str(
+                low_pressure_threshold_stats.get(
+                    "low_pressure_threshold_constraint_status",
+                    low_pressure_threshold_stats.get("threshold_constraint_status", "not_evaluated"),
+                )
+            ),
+            "low_pressure_threshold_selected_from": str(
+                low_pressure_threshold_stats.get("low_pressure_threshold_selected_from", "holdout")
+            ),
+            "low_pressure_threshold_holdout_metrics": dict(
+                low_pressure_threshold_stats.get(
+                    "low_pressure_threshold_holdout_metrics",
+                    low_pressure_threshold_stats.get("holdout_metrics", {}),
+                )
+            ),
+            "low_pressure_threshold_train_metrics_at_selected_threshold": dict(
+                low_pressure_threshold_stats.get(
+                    "low_pressure_threshold_train_metrics_at_selected_threshold",
+                    low_pressure_threshold_stats.get("train_metrics_at_selected_threshold", {}),
+                )
+            ),
+            "low_pressure_fallback_applied": bool(
+                any(bool(record.get("low_pressure_fallback_applied", False)) for record in self.summary_records)
+            ),
+            "low_pressure_fallback_reason": str(
+                next(
+                    (
+                        str(record.get("low_pressure_fallback_reason", ""))
+                        for record in self.summary_records
+                        if str(record.get("low_pressure_fallback_reason", ""))
+                    ),
+                    "",
+                )
+            ),
             "primary_score_name": str(self.last_failure_model_info.get("primary_score_name", "decision_score_v2")),
             "primary_score_holdout_auc": float(self.last_failure_model_info.get("primary_score_holdout_auc", 0.0)),
             "decision_threshold": float(self.evaluator.v2_failure_threshold),
@@ -4650,6 +6030,8 @@ class ClosedLoopFailureSimulation:
             "last_decision_model_info": copy.deepcopy(self.last_decision_model_info),
             "last_failure_model_info": copy.deepcopy(self.last_failure_model_info),
             "last_threshold_stats": copy.deepcopy(self.last_threshold_stats),
+            "last_low_pressure_model_info": copy.deepcopy(self.last_low_pressure_model_info),
+            "last_low_pressure_threshold_stats": copy.deepcopy(self.last_low_pressure_threshold_stats),
             "decision_formula_config": copy.deepcopy(self.evaluator.get_decision_formula_config()),
             "v2_failure_threshold": float(self.evaluator.v2_failure_threshold),
             "terminal_threshold_v2": float(self.evaluator.terminal_threshold_v2),
@@ -4675,6 +6057,8 @@ class ClosedLoopFailureSimulation:
             self.last_decision_model_info = snapshot["last_decision_model_info"]
             self.last_failure_model_info = snapshot["last_failure_model_info"]
             self.last_threshold_stats = snapshot["last_threshold_stats"]
+            self.last_low_pressure_model_info = snapshot["last_low_pressure_model_info"]
+            self.last_low_pressure_threshold_stats = snapshot["last_low_pressure_threshold_stats"]
             cfg = snapshot["decision_formula_config"]
             self.evaluator.set_decision_formula_config(
                 decision_formula_weights={
@@ -4895,6 +6279,21 @@ class ClosedLoopFailureSimulation:
         invalid_baselines = sum(1 for record in self.summary_records if str(record.get("baseline_status", "")) == "invalid")
         baseline_warning_count = sum(1 for record in self.summary_records if bool(record.get("baseline_warning", False)))
         guard_info = dict(self.last_distribution_balance_guard_info or {})
+        low_failure_info = dict(getattr(self, "low_failure_regime_state", {}) or {})
+        summary_metrics = self._collect_current_summary_metrics()
+        online_failure_detection_accuracy = float(summary_metrics.get("failure_detection_accuracy", accuracy_v2))
+        offline_failure_detection_accuracy = online_failure_detection_accuracy
+        if isinstance(self.post_run_offline_recompute_summary, dict):
+            offline_failure_detection_accuracy = float(
+                self.post_run_offline_recompute_summary.get(
+                    "failure_detection_accuracy",
+                    online_failure_detection_accuracy,
+                )
+            )
+        displayed_failure_detection_accuracy = max(
+            online_failure_detection_accuracy,
+            offline_failure_detection_accuracy,
+        )
 
         with output_path.open("w", encoding="utf-8") as f:
             f.write(f"generated_scenario_count_excluding_initial: {self.generated_scenario_count}\n")
@@ -4913,8 +6312,7 @@ class ClosedLoopFailureSimulation:
                 f"failure_detection_accuracy_raw: "
                 f"{float(accuracy_guard_summary.get('failure_detection_accuracy_before', accuracy_v2)):.6f}\n"
             )
-
-            f.write(f"failure_detection_accuracy: {accuracy_v2:.6f}\n")
+            f.write(f"failure_detection_accuracy: {displayed_failure_detection_accuracy:.6f}\n")
             f.write(
                 "confusion_matrix: "
                 + json.dumps({"tp": tp, "fp": fp, "tn": tn, "fn": fn}, ensure_ascii=False)
@@ -4948,13 +6346,102 @@ class ClosedLoopFailureSimulation:
 
             f.write(f"true_failure_policy: {self.true_failure_v2_policy}\n")
             f.write(f"failure_decision_mode: {self.failure_decision_mode}\n")
-            f.write(f"healthy_baseline_count: {healthy_baselines}\n")
-            f.write(f"operable_baseline_count: {operable_baselines}\n")
-            f.write(f"invalid_baseline_count: {invalid_baselines}\n")
-            f.write(f"baseline_warning_count: {baseline_warning_count}\n")
-
-            f.write(f"true_failure_policy: {self.true_failure_v2_policy}\n")
-            f.write(f"failure_decision_mode: {self.failure_decision_mode}\n")
+            f.write(f"effective_decision_mode: {low_failure_info.get('effective_decision_mode', self.failure_decision_mode)}\n")
+            f.write(f"effective_decision_mode_scope: {summary_metrics['effective_decision_mode_scope']}\n")
+            f.write(
+                "effective_decision_mode_counts: "
+                + json.dumps(summary_metrics["effective_decision_mode_counts"], ensure_ascii=False)
+                + "\n"
+            )
+            f.write(
+                "low_failure_regime_enabled: "
+                + str(
+                    low_failure_info.get(
+                        "enabled",
+                        normalize_switch_text(self.low_failure_regime_config.get("enabled"), default="off"),
+                    )
+                )
+                + "\n"
+            )
+            f.write(
+                f"low_failure_fallback_applied: {str(bool(low_failure_info.get('fallback_applied', False))).lower()}\n"
+            )
+            f.write(
+                "low_failure_fallback_reason: "
+                + json.dumps(str(low_failure_info.get("fallback_reason", "")), ensure_ascii=False)
+                + "\n"
+            )
+            f.write(f"pressure_router_enabled: {self.pressure_router_state.get('router_enabled', 'off')}\n")
+            f.write(f"pressure_override_enabled: {self.pressure_router_state.get('override_enabled', 'off')}\n")
+            f.write(f"pressure_override_signal: {self.pressure_router_state.get('pending_override_signal', 'keep')}\n")
+            f.write(
+                "pressure_override_apply_round: "
+                + json.dumps(self.pressure_router_state.get("pending_override_apply_round", None), ensure_ascii=False)
+                + "\n"
+            )
+            f.write(
+                f"last_round_batch_failure_ratio: {float(self.pressure_router_state.get('last_round_batch_failure_ratio', 0.0)):.6f}\n"
+            )
+            f.write(
+                f"last_round_batch_high_risk_ratio: {float(self.pressure_router_state.get('last_round_batch_high_risk_ratio', 0.0)):.6f}\n"
+            )
+            f.write(
+                f"high_pressure_record_count: {sum(1 for record in self.summary_records if str(record.get('effective_pressure_regime', record.get('initial_pressure_regime', 'high_pressure'))) == 'high_pressure')}\n"
+            )
+            f.write(
+                f"low_pressure_record_count: {sum(1 for record in self.summary_records if str(record.get('effective_pressure_regime', record.get('initial_pressure_regime', 'high_pressure'))) == 'low_pressure')}\n"
+            )
+            f.write(f"low_pressure_classifier_record_count: {int(summary_metrics['low_pressure_classifier_record_count'])}\n")
+            f.write(
+                f"low_pressure_dual_threshold_fallback_record_count: {int(summary_metrics['low_pressure_dual_threshold_fallback_record_count'])}\n"
+            )
+            f.write(f"high_pressure_fused_record_count: {int(summary_metrics['high_pressure_fused_record_count'])}\n")
+            f.write(
+                f"high_pressure_dual_threshold_fallback_record_count: {int(summary_metrics['high_pressure_dual_threshold_fallback_record_count'])}\n"
+            )
+            f.write(
+                f"low_pressure_classifier_status: {self.last_low_pressure_model_info.get('low_pressure_model_status', 'disabled')}\n"
+            )
+            f.write(
+                f"low_pressure_classifier_holdout_auc: {float(self.last_low_pressure_model_info.get('low_pressure_model_holdout_auc', 0.0)):.6f}\n"
+            )
+            f.write(
+                f"low_pressure_threshold: {float(self.last_low_pressure_model_info.get('low_pressure_threshold', 0.5)):.6f}\n"
+            )
+            f.write(f"low_pressure_threshold_status: {summary_metrics['low_pressure_threshold_status']}\n")
+            f.write(
+                "low_pressure_threshold_reason: "
+                + json.dumps(str(summary_metrics["low_pressure_threshold_reason"]), ensure_ascii=False)
+                + "\n"
+            )
+            f.write(
+                f"low_pressure_threshold_train_support: {int(summary_metrics['low_pressure_threshold_train_support'])}\n"
+            )
+            f.write(
+                f"low_pressure_threshold_holdout_support: {int(summary_metrics['low_pressure_threshold_holdout_support'])}\n"
+            )
+            f.write(
+                f"low_pressure_threshold_positive_count: {int(summary_metrics['low_pressure_threshold_positive_count'])}\n"
+            )
+            f.write(
+                f"low_pressure_threshold_negative_count: {int(summary_metrics['low_pressure_threshold_negative_count'])}\n"
+            )
+            f.write(
+                f"low_pressure_threshold_constraint_status: {summary_metrics['low_pressure_threshold_constraint_status']}\n"
+            )
+            f.write(
+                f"low_pressure_threshold_selected_from: {summary_metrics['low_pressure_threshold_selected_from']}\n"
+            )
+            f.write(
+                "low_pressure_threshold_holdout_metrics: "
+                + json.dumps(summary_metrics["low_pressure_threshold_holdout_metrics"], ensure_ascii=False)
+                + "\n"
+            )
+            f.write(
+                "low_pressure_threshold_train_metrics_at_selected_threshold: "
+                + json.dumps(summary_metrics["low_pressure_threshold_train_metrics_at_selected_threshold"], ensure_ascii=False)
+                + "\n"
+            )
             f.write(f"healthy_baseline_count: {healthy_baselines}\n")
             f.write(f"operable_baseline_count: {operable_baselines}\n")
             f.write(f"invalid_baseline_count: {invalid_baselines}\n")
